@@ -190,7 +190,7 @@ def _build_env() -> Environment:
 KIND_SUBDIR = {"synthetic": "analyst", "raw": "owner"}
 
 
-def _render_dataset(template, dataset_id: str, legacy_paths: bool) -> None:
+def _render_dataset(template, dataset_id: str) -> None:
     """1 データセット分の analyst/owner × 3分析フラグメントを生成する。"""
     ds_data = {
         "synthetic": json.loads((DATA_DIR / dataset_id / "synthetic.json").read_text("utf-8")),
@@ -198,13 +198,9 @@ def _render_dataset(template, dataset_id: str, legacy_paths: bool) -> None:
     }
     for kind, data in ds_data.items():
         sub = KIND_SUBDIR[kind]
-        # 新パス: site/fragments/<dataset_id>/<sub>/
-        outdirs = [FRAG_DIR / dataset_id / sub]
-        # 旧パス互換(prostate-psa のみ): site/fragments/<sub>/
-        if legacy_paths:
-            outdirs.append(FRAG_DIR / sub)
-        for outdir in outdirs:
-            outdir.mkdir(parents=True, exist_ok=True)
+        # site/fragments/<dataset_id>/<sub>/
+        outdir = FRAG_DIR / dataset_id / sub
+        outdir.mkdir(parents=True, exist_ok=True)
 
         for name, fn in analyses.ANALYSES.items():
             result = fn(data)
@@ -220,10 +216,9 @@ def _render_dataset(template, dataset_id: str, legacy_paths: bool) -> None:
                 chart_config=json.dumps(chart, ensure_ascii=False),
                 code=CODE_SNIPPETS[name],
             )
-            for outdir in outdirs:
-                out = outdir / f"{name}.html"
-                out.write_text(html, encoding="utf-8")
-                print(f"  wrote {out.relative_to(ROOT)}")
+            out = outdir / f"{name}.html"
+            out.write_text(html, encoding="utf-8")
+            print(f"  wrote {out.relative_to(ROOT)}")
 
 
 def render_all() -> None:
@@ -231,7 +226,7 @@ def render_all() -> None:
     template = env.get_template("fragment.html.j2")
 
     for ds in DATASETS:
-        _render_dataset(template, ds.dataset_id, ds.legacy_paths)
+        _render_dataset(template, ds.dataset_id)
 
 
 if __name__ == "__main__":

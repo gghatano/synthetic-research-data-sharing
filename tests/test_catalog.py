@@ -1,7 +1,7 @@
-"""PF-2(#22): 複数データセットレジストリ・カタログ索引・後方互換のテスト。
+"""PF-2(#22): 複数データセットレジストリ・カタログ索引のテスト。
 
 プロダクションコードは変更せず、`build()` を tmp 配下で実行して生成物を検証する。
-既存 PSA データセットの再現性(seed 固定)・旧パス互換・カタログスキーマを確認する。
+既存 PSA データセットの再現性(seed 固定)・カタログスキーマを確認する。
 """
 
 from __future__ import annotations
@@ -24,7 +24,6 @@ CATALOG_REQUIRED_KEYS = {
     "tags",
     "usage_examples",
     "n_patients",
-    "legacy_paths",
     "paths",
     "dummy_preview",
 }
@@ -114,35 +113,14 @@ def test_distinct_seeds_across_datasets() -> None:
     assert len(seeds) == len(set(seeds))
 
 
-# --- 旧パス後方互換(prostate-psa) ------------------------------------------
+# --- 旧パス非生成(レグレッション防止) -------------------------------------
 
 
-def test_legacy_paths_emitted_for_prostate_psa(built) -> None:
-    """prostate-psa は旧パス site/data/{raw,synthetic}.json も生成する。"""
+def test_no_legacy_root_files_emitted(built) -> None:
+    """旧 ROOT パス site/data/{raw,synthetic}.json は生成されない。"""
     out_dir, _ = built
-    assert (out_dir / "raw.json").exists()
-    assert (out_dir / "synthetic.json").exists()
-
-
-def test_legacy_files_byte_identical_to_new(built) -> None:
-    """旧パスと新パス(prostate-psa)のバイト一致(同一データの二重出力)。"""
-    out_dir, _ = built
-    assert (out_dir / "raw.json").read_bytes() == (
-        out_dir / "prostate-psa" / "raw.json"
-    ).read_bytes()
-    assert (out_dir / "synthetic.json").read_bytes() == (
-        out_dir / "prostate-psa" / "synthetic.json"
-    ).read_bytes()
-
-
-def test_no_legacy_paths_for_second_dataset(built) -> None:
-    """legacy_paths=False のデータセットは旧パスへ書き出さない(衝突防止)。"""
-    out_dir, small = built
-    non_legacy = [ds for ds in small if not ds.legacy_paths]
-    assert non_legacy, "前提: legacy_paths=False のデータセットが存在する"
-    # 旧パスのファイルは prostate-psa のもの(=legacy)だけであることを確認
-    legacy_raw = json.loads((out_dir / "raw.json").read_text("utf-8"))
-    assert legacy_raw["patients"][0]["patient_id"].startswith(("RAW", "SYN"))
+    assert not (out_dir / "raw.json").exists()
+    assert not (out_dir / "synthetic.json").exists()
 
 
 # --- カタログ索引 -----------------------------------------------------------

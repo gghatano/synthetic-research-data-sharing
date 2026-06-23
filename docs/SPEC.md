@@ -63,23 +63,14 @@ generator は **複数データセット**を `DATASETS` レジストリ（`gene
 | `tags` | list[str] | 検索/分類用タグ |
 | `usage_examples` | list[str] | 想定分析の短い活用例 |
 | `n_patients` | int | 合成データの患者数 |
-| `legacy_paths` | bool | 旧パス互換を出力したか（後方互換, 下記） |
 | `paths` | object | `raw`/`synthetic`/`fragments_analyst`/`fragments_owner` の参照パス |
 | `dummy_preview` | object | カタログ表示用の少量サンプル（各テーブル先頭数行、**合成データ由来**） |
 
 > `dummy_preview` は公開可能な**合成データ**から抽出する（生データは出さない）。
 
-**後方互換（重要, #22 → #23/#25/#26 で解消予定）**: 既存の前立腺がん PSA
-（`dataset_id = prostate-psa`）に限り、旧パス
-`site/data/{raw,synthetic}.json` と `site/fragments/{analyst,owner}/<analysis>.html`
-も**従来どおり生成し続ける**。PF-1（#21）のログインシェル内の既存 3 ロールデモ・E2E が
-旧パスを参照しているため。旧→新パスへの移行は後続 Issue で行う。
-`prostate-psa` の新旧ファイルはバイト一致する（同一データの二重出力）。
-
 ### 3.1 テーブル（3 テーブル）
 
-`site/data/<dataset_id>/{raw,synthetic}.json`（および `prostate-psa` は旧パス
-`site/data/{raw,synthetic}.json` も）。
+`site/data/<dataset_id>/{raw,synthetic}.json`。
 
 ### patients
 | 列 | 型 | 説明 |
