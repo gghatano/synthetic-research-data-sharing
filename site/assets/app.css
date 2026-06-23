@@ -398,6 +398,12 @@ button.ghost {
 /* 提出物カードの結果件数バッジ */
 .submission-results { color: var(--muted); font-size: .82rem; }
 
+/* 原理デモ面(カタログ外, #43, N4) */
+.demo-view { max-width: 1100px; margin: 0 auto; padding: 8px 0 24px; }
+.demo-head h2 { margin: 0 0 8px; }
+.demo-note { margin: 0 0 12px; }
+.demo-callout { margin-top: 16px; }
+
 .site-foot { text-align: center; color: var(--muted); font-size: .82rem; padding: 20px; }
 .site-foot a { color: var(--brand); }
 
