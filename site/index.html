@@ -73,6 +73,64 @@
         },
       });
 
+      // カタログの共有ストア(#24)。
+      //   base   = 事前生成 catalog.json の datasets[](読み取り専用の基底)
+      //   user   = owner がフォームで登録した擬似データセット(in-memory)
+      //   all()  = base + user をマージした単一ソース。
+      // 一覧(catalogList)・個別ページ(datasetPage)はこの all() を唯一のソースとして読む。
+      //   こうすることで「事前生成 + ユーザー登録分」を一箇所で合成でき、登録が即時に
+      //   一覧/個別へ反映される。base の重複 fetch は loaded フラグで一度きりに抑える。
+      // ユーザー登録分の dataset_id は "user-<n>" でユニーク採番する(base の id と衝突しない)。
+      // localStorage 不使用(ハードリロードでリセット = 既存デモと同じ思想)。
+      Alpine.store("catalog", {
+        base: [], // catalog.json 由来(基底)
+        user: [], // ユーザー登録分(擬似)
+        loaded: false, // base を fetch 済みか
+        error: "", // base 読み込みエラー
+        seq: 0, // user-<n> 採番カウンタ
+        // base を一度だけ取得する。複数ビューから呼ばれても二重 fetch しない。
+        async ensureLoaded() {
+          if (this.loaded) return;
+          try {
+            const res = await fetch("data/catalog.json", { cache: "no-cache" });
+            if (!res.ok) throw new Error("HTTP " + res.status);
+            const json = await res.json();
+            this.base = json.datasets || [];
+            this.loaded = true;
+          } catch (e) {
+            this.error = "カタログの読み込みに失敗しました: " + e.message;
+            throw e;
+          }
+        },
+        // 一覧/個別ページが読む唯一のソース(基底 + ユーザー登録分)。
+        // ユーザー登録分を先頭に出して「登録した直後に上に見える」体験にする。
+        all() {
+          return [...this.user, ...this.base];
+        },
+        find(datasetId) {
+          return this.all().find((d) => d.dataset_id === datasetId) || null;
+        },
+        // 登録済みデータセット(= base に存在しない)かどうか。
+        isUserDataset(datasetId) {
+          return this.user.some((d) => d.dataset_id === datasetId);
+        },
+        // フォームから組み立てた 1 件を登録し、採番した dataset_id を返す。
+        register(dataset) {
+          this.seq += 1;
+          const id = "user-" + this.seq;
+          this.user.unshift({ ...dataset, dataset_id: id });
+          return id;
+        },
+        // 登録分を 1 件削除する(base は触らない)。
+        remove(datasetId) {
+          this.user = this.user.filter((d) => d.dataset_id !== datasetId);
+        },
+        // 登録分をすべて破棄する。
+        reset() {
+          this.user = [];
+        },
+      });
+
       // 提出物の共有ストア(枠のみ。実紐付けは PF-5 #25 / 審査は #26)。
       // キー設計: submissions.byDataset[dataset_id] = 提出物配列(in-memory)。
       //   各提出物の想定形(将来 #25 が書き込む): {
@@ -220,15 +278,148 @@
       </div>
     </section>
 
-    <!-- ======================= データ登録(プレースホルダ) ======================= -->
-    <section class="shell-panel" data-testid="register-view"
-             x-show="$store.session.view === 'register'" x-cloak>
+    <!-- ======================= データ登録(owner 専用, #24) ======================= -->
+    <!--
+      合成データ+メタデータの新規登録(擬似)。owner 専用。
+      確定仮定: ブラウザで合成データは生成しない。メタデータ + (同梱サンプル選択 or
+      JSON アップロード)した「ダミーデータプレビュー」を共有ストアに追加するのみ。
+      本番では TRE 内で合成データを生成・検証し、その結果をカタログに載せる。
+      登録分は in-memory(ハードリロードでリセット)。すべて架空データ。
+    -->
+    <section class="shell-panel register-panel" data-testid="register-view"
+             x-show="$store.session.view === 'register'" x-cloak
+             x-data="registerForm()">
       <h2>データ登録</h2>
-      <p class="placeholder">この画面は後続 Issue (PF-4) で実装します。
-        合成データのメタデータ登録・同梱/アップロードのダミーをここに置く予定です。</p>
-      <div class="actions">
-        <button class="ghost" @click="$store.session.go('top')">← ホームへ戻る</button>
-      </div>
+      <p class="register-intro">研究用データの<strong>メタデータ＋合成/ダミーデータ</strong>を
+        カタログに新規登録します。登録するとすぐに
+        <button class="linklike" type="button"
+                @click="$store.session.go('explore')">データカタログ</button>
+        へ反映されます。</p>
+
+      <!-- 擬似モックである旨・架空データである旨の注記(SPEC と整合) -->
+      <p class="register-disclaimer" data-testid="register-disclaimer">
+        ⚠️ これは<strong>静的モック</strong>です。ブラウザ上で合成データ生成は行いません。
+        登録は<strong>メタデータ＋（同梱サンプル選択 or JSON アップロードした）ダミーデータ</strong>を
+        メモリ上のカタログに追加するだけで、ハードリロードで消えます。本番では TRE
+        (Trusted Research Environment)内で生データから合成データを生成・検証します。
+        <strong>ここで扱うデータはすべて架空</strong>です(実患者データを入力しないでください)。</p>
+
+      <form class="register-form" @submit.prevent="submit()">
+        <!-- ---- メタデータ ---- -->
+        <label class="field">
+          <span class="login-label">タイトル <span class="req">*</span></span>
+          <input type="text" data-testid="reg-title" x-model="form.title"
+                 placeholder="例: 腎機能マーカー推移コホート" autocomplete="off" />
+        </label>
+
+        <label class="field">
+          <span class="login-label">概要 <span class="req">*</span></span>
+          <textarea data-testid="reg-description" x-model="form.description" rows="3"
+                    placeholder="データセットの内容・対象・特徴を簡潔に"></textarea>
+        </label>
+
+        <div class="reg-row">
+          <label class="field">
+            <span class="login-label">ドメイン <span class="req">*</span></span>
+            <input type="text" data-testid="reg-domain" x-model="form.domain"
+                   placeholder="例: nephrology" autocomplete="off" />
+          </label>
+          <label class="field">
+            <span class="login-label">患者数 (n)</span>
+            <input type="number" data-testid="reg-n" x-model.number="form.n_patients"
+                   min="0" placeholder="例: 120" />
+          </label>
+        </div>
+
+        <label class="field">
+          <span class="login-label">タグ (カンマ区切り)</span>
+          <input type="text" data-testid="reg-tags" x-model="form.tagsRaw"
+                 placeholder="例: renal, marker, longitudinal" autocomplete="off" />
+        </label>
+
+        <label class="field">
+          <span class="login-label">活用例 (1 行に 1 件)</span>
+          <textarea data-testid="reg-usage" x-model="form.usageRaw" rows="3"
+                    placeholder="例: マーカー軌跡のクラスタリングで反応サブタイプを同定する"></textarea>
+        </label>
+
+        <!-- ---- 合成/ダミーデータの指定 ---- -->
+        <fieldset class="field reg-source">
+          <legend class="login-label">ダミーデータの指定 <span class="req">*</span></legend>
+          <p class="frag-note">ブラウザで合成データは生成しません。
+            <strong>同梱サンプルから選ぶ</strong>か、<strong>JSON をアップロード</strong>してください。</p>
+
+          <label class="radio">
+            <input type="radio" name="reg-source" value="sample" x-model="source"
+                   data-testid="reg-source-sample" />
+            <span>事前同梱サンプルから選ぶ</span>
+          </label>
+          <div class="reg-source-body" x-show="source === 'sample'" x-cloak>
+            <select data-testid="reg-sample-select" x-model="sampleId">
+              <option value="">— サンプルを選択 —</option>
+              <template x-for="s in samples" :key="s.id">
+                <option :value="s.id" x-text="s.label"></option>
+              </template>
+            </select>
+          </div>
+
+          <label class="radio">
+            <input type="radio" name="reg-source" value="upload" x-model="source"
+                   data-testid="reg-source-upload" />
+            <span>JSON ファイルをアップロード</span>
+          </label>
+          <div class="reg-source-body" x-show="source === 'upload'" x-cloak>
+            <input type="file" accept="application/json,.json"
+                   data-testid="reg-file" @change="onFile($event)" />
+            <p class="frag-note">形式: <code>{ "patients": [...], "psa_measurements": [...],
+              "medications": [...] }</code> のいずれかのテーブルを含む JSON。
+              先頭数行をダミープレビューに使います。</p>
+            <p class="reg-filestatus" data-testid="reg-file-status"
+               x-show="uploadStatus" x-cloak x-text="uploadStatus"></p>
+          </div>
+        </fieldset>
+
+        <p class="login-error" data-testid="reg-error" x-show="error" x-cloak
+           x-text="error"></p>
+        <p class="reg-ok" data-testid="reg-success" x-show="success" x-cloak
+           x-text="success"></p>
+
+        <div class="actions">
+          <button class="primary" type="submit" data-testid="reg-submit">
+            カタログに登録する</button>
+          <button class="ghost" type="button" @click="$store.session.go('top')">
+            ← ホームへ戻る</button>
+        </div>
+      </form>
+
+      <!-- ---- 登録済み(擬似)データセットの管理 ---- -->
+      <section class="reg-registered" data-testid="reg-registered">
+        <h3>登録済みデータセット (擬似)</h3>
+        <p class="placeholder" data-testid="reg-registered-empty"
+           x-show="$store.catalog.user.length === 0">
+          まだ登録はありません。</p>
+        <div class="actions" x-show="$store.catalog.user.length > 0" x-cloak>
+          <button class="ghost" type="button" data-testid="reg-reset"
+                  @click="$store.catalog.reset()">すべての登録分をリセット</button>
+        </div>
+        <div class="reg-list">
+          <template x-for="d in $store.catalog.user" :key="d.dataset_id">
+            <div class="card reg-item" data-testid="reg-item"
+                 :data-dataset-id="d.dataset_id">
+              <div class="reg-item-main">
+                <strong x-text="d.title"></strong>
+                <span class="catalog-domain" x-text="d.domain"></span>
+              </div>
+              <div class="actions">
+                <button class="ghost" type="button" data-testid="reg-open"
+                        @click="$store.session.openDataset(d.dataset_id)">詳細 →</button>
+                <button class="ghost" type="button" data-testid="reg-delete"
+                        @click="$store.catalog.remove(d.dataset_id)">削除</button>
+              </div>
+            </div>
+          </template>
+        </div>
+      </section>
     </section>
 
     <!-- ======================= データカタログ一覧 ======================= -->
@@ -371,6 +562,19 @@
           <!-- 合成データ分析の導線 -->
           <section class="dataset-section" data-testid="dataset-analysis-cta">
             <h3>合成データで分析する</h3>
+
+            <!--
+              ユーザー登録分(擬似)は分析フラグメントが事前生成されていないため、
+              ワークベンチを出さず注記のみ表示する(#24 の仮定: 登録はメタデータ+ダミーのみ)。
+            -->
+            <p class="placeholder" data-testid="dataset-no-workbench"
+               x-show="isUserDataset" x-cloak>
+              このデータセットは<strong>登録メタデータ＋ダミーデータのみ</strong>です
+              (合成データの分析フラグメントは未生成)。本番では TRE 内で合成データを生成・検証し、
+              ここに分析ワークベンチが現れます。</p>
+
+            <template x-if="!isUserDataset">
+            <div>
             <p>このデータセットの<strong>合成データ</strong>で 3 分析(クラスタリング /
               関連分析 / 生存時間分析)を実行し、オーナーへ提出する一連のワークフローを
               体験できます。</p>
@@ -522,6 +726,8 @@
                 </div>
               </section>
             </div>
+            </div>
+            </template>
           </section>
 
           <!-- 紐づく提出物一覧(枠のみ。PF-5 #25 が書き込む) -->
@@ -554,6 +760,164 @@
   </footer>
 
   <script>
+    // データ登録フォーム(#24, owner 専用)。メタデータ + ダミーデータ指定を組み立て、
+    // 共有ストア catalog に擬似登録する。ブラウザで合成データは生成しない。
+    function registerForm() {
+      // ダミープレビューとして許可するテーブルと列(catalog.json の dummy_preview と同形)。
+      const PREVIEW_TABLES = ["patients", "psa_measurements", "medications"];
+      const MAX_PREVIEW_ROWS = 5;
+      return {
+        form: {
+          title: "", description: "", domain: "",
+          n_patients: null, tagsRaw: "", usageRaw: "",
+        },
+        source: "sample",     // sample | upload
+        sampleId: "",
+        uploadedPreview: null, // アップロード JSON から抽出した dummy_preview
+        uploadStatus: "",
+        error: "",
+        success: "",
+        // 事前同梱サンプル(ブラウザ内蔵の小さなダミー。生成ではなく固定値)。
+        samples: [
+          {
+            id: "renal-egfr",
+            label: "腎機能 eGFR サンプル",
+            preview: {
+              patients: [
+                { patient_id: "SMP-001", age: 58, risk_group: "moderate", enrollment_date: "2022-01-10" },
+                { patient_id: "SMP-002", age: 67, risk_group: "high", enrollment_date: "2022-03-22" },
+                { patient_id: "SMP-003", age: 49, risk_group: "low", enrollment_date: "2022-05-05" },
+              ],
+              psa_measurements: [
+                { patient_id: "SMP-001", date: "2022-01-15", psa: 1.8 },
+                { patient_id: "SMP-001", date: "2022-04-15", psa: 2.1 },
+                { patient_id: "SMP-002", date: "2022-03-28", psa: 3.4 },
+              ],
+            },
+          },
+          {
+            id: "generic-marker",
+            label: "汎用マーカー サンプル",
+            preview: {
+              patients: [
+                { patient_id: "GEN-01", age: 61, risk_group: "intermediate", enrollment_date: "2023-02-01" },
+                { patient_id: "GEN-02", age: 54, risk_group: "low", enrollment_date: "2023-02-09" },
+              ],
+              medications: [
+                { patient_id: "GEN-01", datetime: "2023-02-02T09:00", drug: "drug-a", dose_mg: 50 },
+                { patient_id: "GEN-02", datetime: "2023-02-10T10:30", drug: "drug-b", dose_mg: 25 },
+              ],
+            },
+          },
+        ],
+        // アップロードされた JSON を読み、許可テーブルのみを先頭数行に整形して保持する。
+        onFile(ev) {
+          this.error = "";
+          this.success = "";
+          this.uploadedPreview = null;
+          this.uploadStatus = "";
+          const file = ev.target.files && ev.target.files[0];
+          if (!file) return;
+          const reader = new FileReader();
+          reader.onerror = () => {
+            this.uploadStatus = "ファイルの読み込みに失敗しました。";
+          };
+          reader.onload = () => {
+            let json;
+            try {
+              json = JSON.parse(reader.result);
+            } catch (e) {
+              this.uploadStatus = "JSON の解析に失敗しました(構文エラー)。";
+              return;
+            }
+            const preview = this.sanitizePreview(json);
+            if (!preview) {
+              this.uploadStatus =
+                "対応するテーブル(patients / psa_measurements / medications)が見つかりません。";
+              return;
+            }
+            this.uploadedPreview = preview;
+            const tables = Object.keys(preview).join(", ");
+            this.uploadStatus = "読み込み成功: " + tables;
+          };
+          reader.readAsText(file);
+        },
+        // 任意 JSON から許可テーブルのみ抽出し、各テーブル先頭 MAX_PREVIEW_ROWS 行に切る。
+        // 壊れた/想定外の入力でも UI を破綻させない(オブジェクト行のみ採用)。
+        sanitizePreview(json) {
+          if (!json || typeof json !== "object" || Array.isArray(json)) return null;
+          const out = {};
+          for (const name of PREVIEW_TABLES) {
+            const rows = json[name];
+            if (!Array.isArray(rows)) continue;
+            const clean = rows
+              .filter((r) => r && typeof r === "object" && !Array.isArray(r))
+              .slice(0, MAX_PREVIEW_ROWS);
+            if (clean.length) out[name] = clean;
+          }
+          return Object.keys(out).length ? out : null;
+        },
+        // 現在の入力からダミープレビューを決める(source に応じて)。
+        resolvePreview() {
+          if (this.source === "sample") {
+            const s = this.samples.find((x) => x.id === this.sampleId);
+            return s ? s.preview : null;
+          }
+          if (this.source === "upload") return this.uploadedPreview;
+          return null;
+        },
+        parseList(raw, sep) {
+          return (raw || "")
+            .split(sep)
+            .map((x) => x.trim())
+            .filter((x) => x.length);
+        },
+        submit() {
+          this.error = "";
+          this.success = "";
+          // 必須項目バリデーション。
+          if (!this.form.title.trim()) { this.error = "タイトルは必須です。"; return; }
+          if (!this.form.description.trim()) { this.error = "概要は必須です。"; return; }
+          if (!this.form.domain.trim()) { this.error = "ドメインは必須です。"; return; }
+          const preview = this.resolvePreview();
+          if (!preview) {
+            this.error = this.source === "upload"
+              ? "アップロードした JSON から有効なダミーデータを取得できませんでした。"
+              : "同梱サンプルを選択してください。";
+            return;
+          }
+          // catalog.json の datasets[] と同形のエントリを組み立てる(dataset_id は store が採番)。
+          const tags = this.parseList(this.form.tagsRaw, ",");
+          const usage = this.parseList(this.form.usageRaw, "\n");
+          const n = Number.isFinite(this.form.n_patients) ? this.form.n_patients : 0;
+          const entry = {
+            title: this.form.title.trim(),
+            description: this.form.description.trim(),
+            owner: this.$store.session.user?.name || "owner",
+            domain: this.form.domain.trim(),
+            tags,
+            usage_examples: usage,
+            n_patients: n,
+            dummy_preview: preview,
+            // 分析フラグメントは未生成(ユーザー登録分)。paths は持たせない。
+          };
+          const id = this.$store.catalog.register(entry);
+          this.success = "登録しました(" + id + ")。データカタログに反映されました。";
+          this.resetForm();
+        },
+        resetForm() {
+          this.form = {
+            title: "", description: "", domain: "",
+            n_patients: null, tagsRaw: "", usageRaw: "",
+          };
+          this.source = "sample";
+          this.sampleId = "";
+          this.uploadedPreview = null;
+          this.uploadStatus = "";
+        },
+      };
+    }
+
     // ログイン画面のローカルフォーム状態(入力中の値)。
     function loginForm() {
       return {
@@ -575,28 +939,28 @@
       };
     }
 
-    // カタログ一覧: catalog.json を fetch して描画 + 簡易検索。
+    // カタログ一覧: 共有ストア catalog(基底 catalog.json + ユーザー登録分)を描画 + 簡易検索。
     function catalogList() {
       return {
-        datasets: [],
         loading: true,
-        error: "",
-        query: "",
         async load() {
-          if (this.datasets.length) return; // 再表示時の二重 fetch を避ける
           this.loading = true;
-          this.error = "";
           try {
-            const res = await fetch("data/catalog.json", { cache: "no-cache" });
-            if (!res.ok) throw new Error("HTTP " + res.status);
-            const json = await res.json();
-            this.datasets = json.datasets || [];
+            await this.$store.catalog.ensureLoaded();
           } catch (e) {
-            this.error = "カタログの読み込みに失敗しました: " + e.message;
+            // エラーは共有ストア側に保持される(error() が拾う)。
           } finally {
             this.loading = false;
           }
         },
+        // 一覧の表示元は常に共有ストア(基底 + 登録分のマージ)。
+        get datasets() {
+          return this.$store.catalog.all();
+        },
+        get error() {
+          return this.$store.catalog.error;
+        },
+        query: "",
         filtered() {
           const q = this.query.trim().toLowerCase();
           if (!q) return this.datasets;
@@ -611,33 +975,35 @@
       };
     }
 
-    // 個別ページ: catalog.json から currentDatasetId のエントリを取り出して描画。
+    // 個別ページ: 共有ストア catalog(基底 + 登録分)から currentDatasetId のエントリを描画。
     function datasetPage() {
       return {
-        datasets: [],
         dataset: null,
         loading: true,
-        error: "",
         showWorkbench: false,
         async load() {
           this.loading = true;
-          this.error = "";
           try {
-            const res = await fetch("data/catalog.json", { cache: "no-cache" });
-            if (!res.ok) throw new Error("HTTP " + res.status);
-            const json = await res.json();
-            this.datasets = json.datasets || [];
+            await this.$store.catalog.ensureLoaded();
             this.syncCurrent(this.$store.session.currentDatasetId);
           } catch (e) {
-            this.error = "データセットの読み込みに失敗しました: " + e.message;
+            // エラーは共有ストア側に保持される(error() が拾う)。
           } finally {
             this.loading = false;
           }
         },
+        get error() {
+          return this.$store.catalog.error;
+        },
+        // ユーザー登録分は分析フラグメント(synthetic/raw)が存在しない。
+        // この場合は分析ワークベンチを出さず、メタデータ+ダミーのみの旨を表示する。
+        get isUserDataset() {
+          return !!this.dataset && this.$store.catalog.isUserDataset(this.dataset.dataset_id);
+        },
         // 共有ストアの currentDatasetId 変化に追従して表示対象を切り替える。
         syncCurrent(datasetId) {
-          if (!datasetId || !this.datasets.length) return;
-          const d = this.datasets.find((x) => x.dataset_id === datasetId);
+          if (!datasetId) return;
+          const d = this.$store.catalog.find(datasetId);
           if (d && d !== this.dataset) {
             this.dataset = d;
             this.showWorkbench = false; // データセット切替でワークベンチは畳む

@@ -49,6 +49,14 @@ def open_dataset(page: Page, base_url: str, dataset_id: str = "prostate-psa") ->
     page.wait_for_selector("[data-testid='dataset-title']", state="visible")
 
 
+def open_register(page: Page, base_url: str) -> None:
+    """アプリを開き、owner ログイン→データ登録ビューまで遷移して待つ(#24)。"""
+    goto_app(page, base_url)
+    login(page, "保田 オーナー", "owner")
+    page.get_by_test_id("nav-register").click()
+    page.wait_for_selector("[data-testid='register-view']", state="visible")
+
+
 def open_app(page: Page, base_url: str) -> None:
     """アプリを開き、owner ログイン→カタログ→個別ページ→分析ワークベンチまで遷移して待つ。
 
