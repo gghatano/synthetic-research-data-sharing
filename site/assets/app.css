@@ -139,6 +139,13 @@ button.primary {
 }
 button.primary:hover { background: var(--brand-dark); }
 button.primary:disabled { background: #9fb3cc; cursor: default; }
+/* 合成データのダウンロード導線(#40): button.primary と同じ見た目のアンカー。 */
+a.primary.download-link {
+  display: inline-block; background: var(--brand); color: #fff; border: none;
+  padding: 11px 20px; border-radius: 8px; font-size: .95rem; font-weight: 600;
+  text-decoration: none;
+}
+a.primary.download-link:hover { background: var(--brand-dark); }
 button.ghost {
   background: transparent; border: 1px solid var(--brand); color: var(--brand);
   padding: 10px 16px; border-radius: 8px; cursor: pointer;

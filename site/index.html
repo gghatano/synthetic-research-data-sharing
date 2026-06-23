@@ -595,6 +595,30 @@
             </template>
           </section>
 
+          <!--
+            合成データのダウンロード(#40, N1)。分析者は合成データを手元に持ち帰り、
+            外部で分析プログラムを開発する(code-to-data)。配布対象は事前生成済みの
+            site/data/<dataset_id>/synthetic.json(架空の合成データ)のみ。生データ(raw)は
+            TRE 隔離の擬似のため UI からは一切リンクしない(静的デモのため raw.json 自体は
+            サーバ上に存在するが、UI から導線を出さないことで隔離を擬似する)。
+            仮定: 合成データファイルを持つのは同梱データセット(base)のみ。ユーザー登録分
+            (user-<n>)は合成データ未生成のためダウンロード導線を出さない(§7.7 の
+            「分析未提供」と同じ扱い)。
+          -->
+          <section class="dataset-section" data-testid="dataset-download"
+                   x-show="hasSyntheticDownload" x-cloak>
+            <h3>合成データのダウンロード</h3>
+            <p class="frag-note">このデータセットの<strong>合成データ(架空)</strong>を
+              JSON でダウンロードできます。手元に持ち帰って分析プログラムを開発し、結果を
+              提出してください。これは<strong>合成データであり生データ(実患者)ではありません</strong>。
+              生データは TRE 内に隔離され、ダウンロードできません。</p>
+            <div class="actions">
+              <a class="primary download-link" data-testid="download-synthetic"
+                 :href="syntheticHref" :download="syntheticFilename">
+                合成データ(JSON)をダウンロード ↓</a>
+            </div>
+          </section>
+
           <!-- 合成データ分析の導線 -->
           <section class="dataset-section" data-testid="dataset-analysis-cta">
             <h3>合成データで分析する</h3>
@@ -1174,6 +1198,22 @@
         // この場合は分析ワークベンチを出さず、メタデータ+ダミーのみの旨を表示する。
         get isUserDataset() {
           return !!this.dataset && this.$store.catalog.isUserDataset(this.dataset.dataset_id);
+        },
+        // 合成データのダウンロード(#40)。配布できるのは合成データファイルを持つ
+        // 同梱データセット(base)のみ。ユーザー登録分(user-<n>)は未生成のため非表示。
+        get hasSyntheticDownload() {
+          return !!this.dataset && !this.isUserDataset;
+        },
+        // 配布対象は data/<dataset_id>/synthetic.json(架空の合成データ)に限定する。
+        // 生データ(raw.json)はここからも他のどこからもリンクしない(TRE 隔離の擬似)。
+        get syntheticHref() {
+          const id = this.dataset && this.dataset.dataset_id;
+          return id ? "data/" + id + "/synthetic.json" : "#";
+        },
+        // ダウンロード時のファイル名(<dataset_id>-synthetic.json)。
+        get syntheticFilename() {
+          const id = this.dataset && this.dataset.dataset_id;
+          return id ? id + "-synthetic.json" : "synthetic.json";
         },
         // 共有ストアの currentDatasetId 変化に追従して表示対象を切り替える。
         syncCurrent(datasetId) {
