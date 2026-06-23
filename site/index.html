@@ -19,15 +19,14 @@
     本番では TRE/サーバー側のセッションと認可で隔離する(ここはあくまで UI 上の擬似)。
 
     ビュー: login | top | register | explore(カタログ一覧) | dataset(個別ページ)
-          | demo(カタログ外の原理デモ面)
-    カタログ一覧・個別ページ・原理デモは「誰でも閲覧可」: ログイン不要でアクセスできる。
+    カタログ一覧・個別ページは「誰でも閲覧可」: ログイン不要でアクセスできる。
     register(データ登録)のみ owner 専用ガードを掛ける。
   -->
   <script>
     document.addEventListener("alpine:init", () => {
       Alpine.store("session", {
         user: null, // { name, role } | null
-        view: "login", // login | top | register | explore | dataset | demo
+        view: "login", // login | top | register | explore | dataset
         currentDatasetId: null, // dataset ビューで表示中のデータセット
         presets: [
           { name: "保田 オーナー", role: "owner" },
@@ -50,13 +49,12 @@
           this.user = null;
           this.view = "login";
         },
-        // 公開閲覧できるビュー(ログイン不要)。demo はカタログ外の原理デモ面(#43)。
+        // 公開閲覧できるビュー(ログイン不要)。
         isPublicView(view) {
           return (
             view === "login" ||
             view === "explore" ||
-            view === "dataset" ||
-            view === "demo"
+            view === "dataset"
           );
         },
         go(view) {
@@ -242,10 +240,6 @@
             :class="{ sel: $store.session.view === 'explore'
                           || $store.session.view === 'dataset' }"
             @click="$store.session.go('explore')">データカタログ</button>
-    <!-- カタログ外の原理デモ面(#43, N4): 誰でも閲覧可。 -->
-    <button data-testid="nav-demo"
-            :class="{ sel: $store.session.view === 'demo' }"
-            @click="$store.session.go('demo')">原理デモ</button>
   </nav>
 
   <main>
@@ -735,8 +729,7 @@
             紐づく提出物一覧(#41 が書き込む)＋審査(#42, N3)。各カードは提出物の概要
             (プログラム名・結果件数・レポート・status)を表示する。owner だけに「審査する」導線を
             出し(擬似ガード)、選んだ提出物の【プログラム(コード)＋結果(画像/テキスト)＋レポート】を
-            閲覧 → 承認で status を approved に遷移させる。生データ並置(合成≈生)はここでは行わない
-            (核メッセージのデモはカタログ外の専用面 = §7.10, #43)。
+            閲覧 → 承認で status を approved に遷移させる。生データ並置(合成≈生)はここでは行わない。
           -->
           <section class="dataset-section" data-testid="dataset-submissions"
                    x-data="reviewPanel()">
@@ -865,10 +858,7 @@
                 <p class="review-callout" data-testid="review-callout"
                    x-show="reviewing.status === 'approved'" x-cloak>
                   ✅ この提出物を<strong>承認しました</strong>。本番では TRE 内で同じプログラムを
-                  生データへ適用し、結果(本物のレポート)を作成します。「合成データで開発した同一
-                  コードが生データでも近い結果になる」原理のデモは、カタログ外の
-                  <a href="#" data-testid="review-demo-link"
-                     @click.prevent="$store.session.go('demo')">専用デモ面</a>で確認できます。</p>
+                  生データへ適用し、結果(本物のレポート)を作成します。</p>
               </div>
               </template>
             </section>
@@ -876,63 +866,11 @@
         </div>
       </template>
     </section>
-
-    <!-- ======================= 原理デモ面(カタログ外, #43, N4) ======================= -->
-    <!--
-      「同一コードが合成・生で動き、結果は近いが非同一」という核メッセージは、アプリで見せる
-      実コンテンツ(カタログ/提出/審査)ではなく【デモ成果物】である。そのため、データカタログ
-      には置かず、このカタログ外の専用デモ面に配置する(#39 確定方針)。
-      事前生成済みフラグメント(analyst=合成 / owner=生)を 1 データセット(prostate-psa)で
-      並置する。canvas id は合成=chart-synthetic-<a> / 生=chart-raw-<a> で別 id のため衝突しない。
-    -->
-    <section class="demo-view" data-testid="demo-view"
-             x-show="$store.session.view === 'demo'" x-cloak
-             x-data="demoPage()">
-      <header class="demo-head">
-        <h2>原理デモ：合成データで開発したコードが、生データでも“近いが非同一”に動く</h2>
-        <p class="frag-note demo-note" data-testid="demo-disclaimer">
-          これは<strong>デモ成果物</strong>です(データカタログには置きません)。同一の分析を
-          <strong>合成データ</strong>と<strong>生データ</strong>に適用した事前計算結果を並置し、
-          「合成 → 生」が<strong>近いが完全には一致しない</strong>ことを示します。生データは
-          TRE に隔離され公開しません(ここでは事前生成済みの結果のみを読み込みます)。</p>
-      </header>
-
-      <!-- 分析の選択(prostate-psa の 3 分析)。 -->
-      <div class="analysis-picker" data-testid="demo-picker">
-        <template x-for="a in analyses" :key="a.id">
-          <button class="chip" :class="{ sel: selected === a.id }"
-                  :data-analysis="a.id"
-                  @click="pick(a.id)" x-text="a.title"></button>
-        </template>
-      </div>
-
-      <p class="placeholder" data-testid="demo-empty" x-show="!selected" x-cloak>
-        上のボタンから分析を選ぶと、合成データと生データの結果を並べて表示します。</p>
-
-      <div class="compare" x-show="selected" x-cloak>
-        <div class="compare-col">
-          <h3 class="col-head synthetic">合成データの結果</h3>
-          <div id="demo-synthetic" class="result-pane"></div>
-        </div>
-        <div class="compare-col">
-          <h3 class="col-head raw">生データの結果(TRE 内で事前計算)</h3>
-          <div id="demo-raw" class="result-pane"></div>
-        </div>
-      </div>
-
-      <p class="review-callout demo-callout" data-testid="demo-callout"
-         x-show="selected" x-cloak>
-        ✅ 同じ分析コードが両データで動作しました。結果は<strong>近いが完全には一致しません</strong>
-        (個票が異なるため)。だからこそ、分析者は<strong>合成データで安全に開発</strong>し、最後に
-        オーナーが<strong>生データへ適用</strong>するステップに価値があります。</p>
-    </section>
   </main>
 
   <footer class="site-foot">
     <p>静的デモ (GitHub Pages) — htmx + Alpine.js + Chart.js。データと分析は Python
       (pandas / scikit-learn) で事前計算。
-      <a href="#" data-testid="foot-demo-link"
-         @click.prevent="$store.session.go('demo')">原理デモ</a> /
       <a href="../docs/SPEC.md">仕様書</a></p>
   </footer>
 
@@ -1398,31 +1336,6 @@
           this.resultImage = null;
           this.resultText = "";
           this.report = "";
-        },
-      };
-    }
-
-    // 原理デモ面(カタログ外, #43, N4)。1 データセット(prostate-psa)で、同一分析の
-    // 合成データ結果(analyst フラグメント)と生データ結果(owner フラグメント)を並置する。
-    // フラグメントはデータセット非依存の canvas id(合成=chart-synthetic-<a> /
-    // 生=chart-raw-<a>)を別 id で持つため、並置しても衝突しない。Chart の二重描画は
-    // フラグメント側の Chart.getChart(el).destroy() で防ぐ(分析切替・再選択でも保たれる)。
-    function demoPage() {
-      return {
-        DATASET: "prostate-psa",
-        selected: null, // 選択中の分析
-        analyses: [
-          { id: "clustering", title: "PSA軌跡クラスタリング" },
-          { id: "association", title: "投薬–PSA反応の関連分析" },
-          { id: "survival", title: "進行イベントの生存時間分析" },
-        ],
-        // 合成・生の両フラグメントを同時に読み込む(本番では同一ジョブの 2 結果に相当)。
-        pick(analysis) {
-          this.selected = analysis;
-          htmx.ajax("GET", "fragments/" + this.DATASET + "/analyst/" +
-                    analysis + ".html", "#demo-synthetic");
-          htmx.ajax("GET", "fragments/" + this.DATASET + "/owner/" +
-                    analysis + ".html", "#demo-raw");
         },
       };
     }
