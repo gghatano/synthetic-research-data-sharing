@@ -1,0 +1,69 @@
+name: Refactor Task
+description: 振る舞いを変えない内部改善。ゴールデン比較で生成物の同一性を保証する。
+title: "[Refactor] "
+labels: ["type:refactor", "status:ready"]
+body:
+  - type: textarea
+    id: motivation
+    attributes:
+      label: 目的
+      description: なぜリファクタするか（可読性/重複排除/型/構造）。機能追加は含めない。
+    validations:
+      required: true
+
+  - type: textarea
+    id: target
+    attributes:
+      label: 対象と「変えない契約」
+      description: 触る範囲と、不変に保つ外部挙動（戻り dict のキー・型・丸め桁、生成物のバイト同一性など）
+      placeholder: |
+        - 対象: generator/...
+        - 不変契約: clustering(data) の戻り dict / site 生成物が差分0
+    validations:
+      required: true
+
+  - type: textarea
+    id: non_scope
+    attributes:
+      label: 非スコープ
+      description: 仕様変更・機能追加・数値やスキーマの変更は禁止
+      value: |
+        - 仕様変更・機能追加をしない
+        - 数値 / スキーマ / シードを変えない
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 完了条件
+      value: |
+        - [ ] リファクタ前後で生成物（site/data, site/fragments）が差分0（ゴールデン比較）
+        - [ ] 既存テストが緑のまま
+        - [ ] `uv run ruff check .` / `uv run mypy generator` が緑（または改善）
+    validations:
+      required: true
+
+  - type: textarea
+    id: verification
+    attributes:
+      label: 検証方法
+      value: |
+        ```bash
+        # before: build して site/ を退避 → refactor → 再build → git diff で差分0 を確認
+        uv run python -m generator.generate_data && uv run python -m generator.render
+        git diff --stat site/
+        uv run pytest -q
+        ```
+    validations:
+      required: true
+
+  - type: textarea
+    id: claude_instruction
+    attributes:
+      label: Claude Code への作業指示
+      value: |
+        refactor-safely SKILL に従ってください。小さなステップで変更し、各ステップで検証を回し、
+        生成物の差分が無い（または説明可能な差分のみ）ことを証跡として示してください。
+    validations:
+      required: true

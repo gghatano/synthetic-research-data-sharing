@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>合成データで安全に研究データを共有する — デモ</title>
+  <link rel="stylesheet" href="assets/app.css" />
+  <!-- Chart.js は同期読込(フラグメント内の描画スクリプトより先に定義させる) -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <!-- htmx: フラグメント(静的HTML / 本番ではFastAPI応答)を hx-get で読み込む -->
+  <script defer src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.3/dist/htmx.min.js"></script>
+  <!-- Alpine.js: 3ロールのワークフロー状態機械を管理 -->
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
+</head>
+
+<body x-data="workflow()">
+  <header class="site-head">
+    <h1>合成データで安全に研究データを共有する</h1>
+    <p class="sub">code-to-data / TRE 型ワークフローのデモ —
+      <strong>生データを外部に出さず</strong>、合成データで開発した分析コードを
+      オーナーが生データへ適用する</p>
+  </header>
+
+  <!-- ステッパー: ワークフローの現在地 -->
+  <nav class="stepper" aria-label="ワークフロー進捗">
+    <ol>
+      <li :class="{ done: phaseRank() >= 1, active: phase === 'idle' }">
+        <span class="num">1</span>合成データ公開</li>
+      <li :class="{ done: phaseRank() >= 2, active: phase === 'published' }">
+        <span class="num">2</span>分析者が開発・提出</li>
+      <li :class="{ done: phaseRank() >= 3, active: phase === 'submitted' }">
+        <span class="num">3</span>オーナーが承認・生データへ適用</li>
+    </ol>
+  </nav>
+
+  <!-- ロール切替タブ -->
+  <div class="tabs" role="tablist">
+    <button role="tab" :class="{ sel: role === 'publish' }"
+            @click="role = 'publish'">① オーナー：公開</button>
+    <button role="tab" :class="{ sel: role === 'analyze' }"
+            @click="role = 'analyze'" :disabled="phase === 'idle'"
+            :title="phase === 'idle' ? 'まず合成データを公開してください' : ''">
+      ② 分析者：ワークベンチ</button>
+    <button role="tab" :class="{ sel: role === 'review' }"
+            @click="enterReview()" :disabled="phaseRank() < 2"
+            :title="phaseRank() < 2 ? 'まず分析を提出してください' : ''">
+      ③ オーナー：審査</button>
+  </div>
+
+  <main>
+    <!-- ======================= ① オーナー：公開 ======================= -->
+    <section class="panel" x-show="role === 'publish'">
+      <h2>① オーナー：合成データを公開する</h2>
+      <p>手元の生データ(機微情報)はサーバー外に出しません。統計的性質を模した
+        <strong>合成データ</strong>だけを分析者に公開します。</p>
+
+      <div class="cards">
+        <div class="card locked">
+          <div class="lock">🔒 非公開</div>
+          <h3>生データ (raw)</h3>
+          <p>実際の患者の PSA 時系列・投薬記録。TRE 内に隔離され、分析者からは
+            参照できません。</p>
+          <code>site/data/raw.json</code>
+        </div>
+
+        <div class="card" :class="{ published: phase !== 'idle' }">
+          <div class="lock open" x-show="phase !== 'idle'">🔓 公開済み</div>
+          <h3>合成データ (synthetic)</h3>
+          <p>別シード・分布シフトで生成。統計的に類似するが個票は別物。分析者は
+            これを使ってコードを開発します。</p>
+          <code>site/data/synthetic.json</code>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button class="primary" @click="publish()" :disabled="phase !== 'idle'"
+                x-text="phase === 'idle' ? '合成データを公開する' : '公開済み ✓'"></button>
+        <button class="ghost" @click="role = 'analyze'" x-show="phase !== 'idle'">
+          分析者ワークベンチへ →</button>
+      </div>
+    </section>
+
+    <!-- ======================= ② 分析者：ワークベンチ ======================= -->
+    <section class="panel" x-show="role === 'analyze'">
+      <h2>② 分析者：合成データで分析を開発する</h2>
+      <p>公開された<strong>合成データ</strong>に対して分析コードを実行します
+        (本番では htmx が FastAPI のエンドポイントを叩き、サーバーが scikit-learn で
+        計算します)。</p>
+
+      <div class="analysis-picker">
+        <button class="chip" :class="{ sel: selected === 'clustering' }"
+                hx-get="fragments/analyst/clustering.html"
+                hx-target="#analyst-result" hx-swap="innerHTML"
+                @click="selected = 'clustering'; loaded = false">
+          PSA軌跡クラスタリング</button>
+        <button class="chip" :class="{ sel: selected === 'association' }"
+                hx-get="fragments/analyst/association.html"
+                hx-target="#analyst-result" hx-swap="innerHTML"
+                @click="selected = 'association'; loaded = false">
+          投薬–PSA反応の関連分析</button>
+        <button class="chip" :class="{ sel: selected === 'survival' }"
+                hx-get="fragments/analyst/survival.html"
+                hx-target="#analyst-result" hx-swap="innerHTML"
+                @click="selected = 'survival'; loaded = false">
+          進行イベントの生存時間分析</button>
+      </div>
+
+      <!-- 読込完了は target 要素の htmx:after-swap で検知する -->
+      <div id="analyst-result" class="result-pane"
+           @htmx:after-swap="loaded = true">
+        <p class="placeholder">上のボタンから分析を選ぶと、合成データでの結果が
+          ここに読み込まれます。</p>
+      </div>
+
+      <div class="actions">
+        <button class="primary" @click="submit()" :disabled="!loaded">
+          この分析をオーナーへ提出する</button>
+        <span class="hint" x-show="phase === 'submitted'">
+          提出済み: <strong x-text="titleOf(submitted)"></strong> →
+          <a href="#" @click.prevent="enterReview()">審査タブへ</a></span>
+      </div>
+    </section>
+
+    <!-- ======================= ③ オーナー：審査 ======================= -->
+    <section class="panel" x-show="role === 'review'">
+      <h2>③ オーナー：提出物を審査し、生データに適用する</h2>
+      <p>分析者が提出したのは<strong>合成データでの結果</strong>です。コードを確認し、
+        問題なければ<strong>同じコードを生データに適用</strong>して本物のレポートを
+        作成します。</p>
+
+      <div class="compare">
+        <div class="compare-col">
+          <h3 class="col-head synthetic">提出物：合成データの結果</h3>
+          <div id="review-synthetic" class="result-pane"></div>
+        </div>
+        <div class="compare-col">
+          <h3 class="col-head raw">承認後：生データの結果</h3>
+          <div id="review-raw" class="result-pane">
+            <p class="placeholder">「承認して生データに適用」を押すと、同一コードを
+              生データで実行した結果がここに表示されます。</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button class="primary" @click="approve()" :disabled="phase === 'approved'"
+                x-text="phase === 'approved' ? '承認済み ✓' : '承認して生データに適用する'">
+        </button>
+        <p class="callout" x-show="phase === 'approved'">
+          ✅ 同じ分析コードが両データで動作しました。結果は<strong>近いが完全には
+          一致しません</strong>(個票が異なるため)。だからこそ、合成データで安全に
+          開発し、最後に生データへ適用するステップに価値があります。</p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-foot">
+    <p>静的デモ (GitHub Pages) — htmx + Alpine.js + Chart.js。データと分析は Python
+      (pandas / scikit-learn) で事前計算。<a href="../docs/SPEC.md">仕様書</a></p>
+  </footer>
+
+  <script>
+    function workflow() {
+      return {
+        role: "publish",
+        phase: "idle",          // idle -> published -> submitted -> approved
+        selected: null,         // 分析者が選択中の分析
+        submitted: null,        // 提出した分析
+        loaded: false,          // フラグメント読込済みか
+        catalog: [
+          { id: "clustering",  title: "PSA軌跡クラスタリング" },
+          { id: "association", title: "投薬–PSA反応の関連分析" },
+          { id: "survival",    title: "進行イベントの生存時間分析" },
+        ],
+        phaseRank() {
+          return { idle: 0, published: 1, submitted: 2, approved: 3 }[this.phase];
+        },
+        titleOf(id) {
+          var a = this.catalog.find(function (x) { return x.id === id; });
+          return a ? a.title : "";
+        },
+        publish() {
+          if (this.phase === "idle") this.phase = "published";
+        },
+        submit() {
+          if (!this.loaded) return;
+          this.submitted = this.selected;
+          if (this.phaseRank() < 2) this.phase = "submitted";
+        },
+        enterReview() {
+          if (this.phaseRank() < 2) return;
+          this.role = "review";
+          // 提出された合成データ結果を審査タブの左に読み込む
+          htmx.ajax("GET", "fragments/analyst/" + this.submitted + ".html",
+                    "#review-synthetic");
+        },
+        approve() {
+          // 同一コードを生データに適用した結果を右に読み込む
+          htmx.ajax("GET", "fragments/owner/" + this.submitted + ".html",
+                    "#review-raw");
+          this.phase = "approved";
+        },
+      };
+    }
+  </script>
+</body>
+</html>

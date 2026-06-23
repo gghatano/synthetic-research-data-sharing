@@ -1,0 +1,131 @@
+name: Implementation Task
+description: 仕様(docs/SPEC.md)に基づく実装タスク。1 Issue = 1 PR = 1 worktree。
+title: "[Task] "
+labels: ["type:implementation", "status:ready"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        このテンプレートは Claude Code への**作業指示書**です。非スコープ・完了条件・検証方法を
+        必ず具体的に埋めてください（この3つが弱いと過剰実装・検証不足になりやすい）。
+
+  - type: textarea
+    id: background
+    attributes:
+      label: 背景
+      description: なぜこのタスクが必要か。仕様の該当箇所・前提となる実装状況。
+      placeholder: |
+        - docs/SPEC.md の §X
+        - 現状 / 課題
+    validations:
+      required: true
+
+  - type: textarea
+    id: spec
+    attributes:
+      label: 対象仕様
+      description: 仕様の該当箇所・要件・制約
+      placeholder: |
+        - 仕様書: docs/SPEC.md
+        - 該当セクション:
+        - 要件:
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: 実装スコープ
+      description: この Issue で実装すること
+      placeholder: |
+        -
+    validations:
+      required: true
+
+  - type: textarea
+    id: non_scope
+    attributes:
+      label: 非スコープ
+      description: この Issue では実装しないこと（過剰実装の防止）
+      placeholder: |
+        -
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected_changes
+    attributes:
+      label: 変更想定箇所
+      description: 変更が想定されるファイル・ディレクトリ
+      placeholder: |
+        - generator/...
+        - tests/...
+        - site/... / generator/templates/...
+    validations:
+      required: false
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 完了条件
+      description: 完了と判断する条件（docs/acceptance-criteria.md の DoD を踏まえる）
+      value: |
+        - [ ] 対象仕様を満たしている（仮定があれば明記）
+        - [ ] テストが追加・更新されている
+        - [ ] `uv run pytest -q` が緑
+        - [ ] `uv run ruff check .` / `uv run ruff format --check .` が緑
+        - [ ] `uv run mypy generator` が緑
+        - [ ] `make build`（または uv run 直叩き）で生成物が再生成できる
+        - [ ] code-reviewer のレビューを通した
+    validations:
+      required: true
+
+  - type: textarea
+    id: verification
+    attributes:
+      label: 検証方法
+      description: 実行すべきコマンド・確認観点
+      value: |
+        ```bash
+        uv sync
+        uv run pytest -q
+        uv run ruff check . && uv run ruff format --check .
+        uv run mypy generator
+        uv run python -m generator.generate_data && uv run python -m generator.render
+        ```
+    validations:
+      required: true
+
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: 依存 Issue
+      description: 先に完了している必要がある Issue
+      placeholder: |
+        - depends on #
+    validations:
+      required: false
+
+  - type: textarea
+    id: risks
+    attributes:
+      label: 既知のリスク・注意点
+      description: 実装時に注意すべき点（再現性・純関数性・生成物の手編集禁止など）
+      placeholder: |
+        - シード固定を崩さない / analyses.py の純関数性を保つ
+    validations:
+      required: false
+
+  - type: textarea
+    id: claude_instruction
+    attributes:
+      label: Claude Code への作業指示
+      description: この Issue を読む前提の具体的な作業指示
+      value: |
+        この Issue のスコープに**限定して**実装してください。
+        作業開始時に対象仕様（docs/SPEC.md）と既存実装を確認してください。
+        スコープ外の発見事項は実装せず、Issue コメントまたは別 Issue 候補として記録してください。
+        実装後、上記「検証方法」のコマンドを実行し、結果を Issue コメントに記録してください。
+        最後に PR を作成し、Issue と相互リンクしてください（pr-from-issue SKILL）。
+    validations:
+      required: true

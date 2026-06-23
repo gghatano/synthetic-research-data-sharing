@@ -1,0 +1,11 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Node (used only for local headless testing; never part of the app)
+node_modules/
+
+# OS
+.DS_Store

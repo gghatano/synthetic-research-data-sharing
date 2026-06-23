@@ -1,0 +1,85 @@
+{#
+  分析結果フラグメント(htmx が hx-get で読み込む)。
+  本番(FastAPI + Jinja2 + htmx)のエンドポイント応答と同形のマークアップ。
+  uid / kind / analysis / result / chart_config / code を受け取る。
+#}
+<section class="fragment" data-kind="{{ kind }}" data-analysis="{{ analysis }}">
+  <div class="frag-head">
+    <span class="badge badge-{{ kind }}">{{ kind_label }}</span>
+    <h3>{{ title }}</h3>
+    <span class="frag-n">n = {{ result.n_patients }}</span>
+  </div>
+
+  <div class="chart-box">
+    <canvas id="chart-{{ uid }}"></canvas>
+  </div>
+
+  {% if analysis == "clustering" %}
+  <table class="frag-table">
+    <thead><tr><th>クラスタ</th><th>人数</th>
+      {% for col in result.feature_cols %}<th>{{ col }}</th>{% endfor %}
+    </tr></thead>
+    <tbody>
+      {% for label, c in result.centroids_standardized.items() %}
+      <tr>
+        <td><span class="dot dot-{{ label }}"></span>{{ label }}</td>
+        <td>{{ result.cluster_sizes.get(label, 0) }}</td>
+        {% for col in result.feature_cols %}<td>{{ c[col] }}</td>{% endfor %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="frag-note">特徴量は標準化済み(z-score)。重心の符号が responder / partial /
+    progressor の解釈に対応する。</p>
+
+  {% elif analysis == "association" %}
+  <table class="frag-table">
+    <thead><tr><th>薬剤</th><th>n</th><th>平均低下率(%)</th><th>SD</th><th>平均用量(mg)</th></tr></thead>
+    <tbody>
+      {% for d in result.by_drug %}
+      <tr><td>{{ d.drug }}</td><td>{{ d.n }}</td><td>{{ d.mean_reduction_pct }}</td>
+        <td>{{ d.sd_reduction_pct }}</td><td>{{ d.mean_dose_mg }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="frag-note">用量–低下率 単回帰: 傾き = {{ result.regression.slope }} %/mg,
+    切片 = {{ result.regression.intercept }} %, R² = {{ result.regression.r2 }}</p>
+
+  {% elif analysis == "survival" %}
+  <table class="frag-table">
+    <thead><tr><th>リスク群</th><th>n</th><th>イベント数</th><th>イベント率(%)</th>
+      <th>進行までの中央値(月)</th></tr></thead>
+    <tbody>
+      {% for r in result.summary %}
+      <tr><td><span class="dot dot-{{ r.risk_group }}"></span>{{ r.risk_group }}</td>
+        <td>{{ r.n }}</td><td>{{ r.n_events }}</td><td>{{ r.event_rate_pct }}</td>
+        <td>{{ r.median_months_to_event if r.median_months_to_event is not none else "—" }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="frag-note">進行イベント = Phoenix 基準 (PSA ≥ nadir + {{ result.progression_delta }} ng/mL)。
+    曲線は Kaplan-Meier 推定。</p>
+  {% endif %}
+
+  <details class="frag-code">
+    <summary>適用された分析コード(抜粋)</summary>
+    <pre><code>{{ code }}</code></pre>
+  </details>
+
+  {# Chart.js 設定を JSON で埋め込み、初期化スクリプトで描画する #}
+  <script type="application/json" id="cfg-{{ uid }}">{{ chart_config | safe }}</script>
+  <script>
+    (function () {
+      var uid = "{{ uid }}";
+      function draw() {
+        var el = document.getElementById("chart-" + uid);
+        var cfgEl = document.getElementById("cfg-" + uid);
+        if (!el || !cfgEl || typeof Chart === "undefined") return;
+        var existing = Chart.getChart(el);   // 再読込時の二重描画を防ぐ
+        if (existing) existing.destroy();
+        new Chart(el.getContext("2d"), JSON.parse(cfgEl.textContent));
+      }
+      draw();
+    })();
+  </script>
+</section>
