@@ -129,11 +129,16 @@ generator は **複数データセット**を `DATASETS` レジストリ（`gene
 | フェーズ | ロール | UI / htmx 動作 |
 |----------|--------|----------------|
 | idle → published | ① オーナー：公開 | 生データは🔒非公開のまま、合成データを公開 |
-| published → submitted | ② 分析者：ワークベンチ | 分析選択で `hx-get fragments/analyst/<a>.html`（合成結果）を読込 → 提出 |
-| submitted → approved | ③ オーナー：審査 | 承認で `hx-get fragments/owner/<a>.html`（生結果）を読込、合成 vs 生を並置 |
+| published → submitted | ② 分析者：ワークベンチ | 分析選択で `htmx.ajax GET fragments/<dataset_id>/analyst/<a>.html`（合成結果）を読込 → 提出 |
+| submitted → approved | ③ オーナー：審査 | 承認で `htmx.ajax GET fragments/<dataset_id>/owner/<a>.html`（生結果）を読込、合成 vs 生を並置 |
 
 htmx のフラグメント取得は本物の htmx 挙動（静的 `.html` を GET）。本番ではこの GET 先が
 FastAPI のエンドポイントに置き換わるだけで、フロント側のマークアップは変わらない。
+
+このワークフローは**カタログのデータ個別ページ配下に内包**される（#23）。フラグメントの
+パス基底は選択中データセット（`fragBase = currentDatasetId`）に追従する。分析者は実行結果に
+**レポート（所見・メモ）**を添えて提出でき、提出物はデータ個別ページの「紐づく提出物」へ
+紐づく（カタログ連携の提出フロー。詳細は **§7.8**）。
 
 ## 5. 3 つの分析（`generator/analyses.py`）
 
@@ -277,9 +282,10 @@ Alpine.store('submissions') = {
 }
 ```
 
-- 個別ページの「紐づく提出物」は `forDataset(dataset_id)` を読むだけ（#23 は読み取り専用）。
-- 提出（#25）・審査（#26）は `add()` 経由で `byDataset[dataset_id]` に積む。各 `Submission` の
-  想定形は `{ id, datasetId, analysis, analyst, status, submittedAt, ... }`（#25 で確定）。
+- 個別ページの「紐づく提出物」は `forDataset(dataset_id)` を読むだけ。
+- 提出（#25）・審査（#26）は `add()` 経由で `byDataset[dataset_id]` に積む。`Submission`
+  スキーマは **§7.8 で確定**（`{ id, datasetId, analysis, analysisTitle, analyst, report,
+  codeExcerpt, status, submittedAt }`）。
 - `localStorage` 不使用（ハードリロードでリセット = 既存デモと同じ思想）。
 
 ### 本番との対応
@@ -358,6 +364,68 @@ Alpine.store('catalog') = {
 | 合成データ生成 | 行わない（同梱サンプル/アップロードで代替） | TRE 内で生成・評価 |
 | 登録の永続化 | Alpine 共有ストア（in-memory） | カタログ API + DB |
 | 認可 | クライアント側の owner 出し分け（UX 用） | サーバー側で強制 |
+
+## 7.8 合成データでの分析・提出（カタログ連携, #25）
+
+カタログ型プラットフォームの**活用（提出）機能**（機能3）。非オーナ（analyst）が公開された
+**合成データを触って分析プログラム＋レポートを提出**し、その提出物をデータ個別ページへ紐づける。
+既存の単一データセット向け「分析ワークベンチ」を**カタログ個別ページから使える形に一般化**した。
+
+### 分析の実行（合成データ・データセット単位）
+
+- 個別ページの「合成データで分析する」から**分析ワークベンチ**を開き、3 分析
+  （`clustering` / `association` / `survival`）をチップで選んで実行・閲覧する。
+- フラグメントは**データセット単位**で読む: `fragments/<dataset_id>/analyst/<analysis>.html`
+  （`fragBase = currentDatasetId`）。`htmx.ajax` の GET 先がデータセットに追従するだけで、
+  本番では `/datasets/<id>/analyses/<a>` 相当の動的 URL に置き換わる同形。
+- Chart.js の二重描画防止（`Chart.getChart(el).destroy()`）はフラグメント内に保持され、
+  データセット切替・再選択でも保たれる。
+
+### 提出（プログラム＋レポート）
+
+- 分析を実行して結果が読み込まれた状態で、**レポート（所見・メモのテキスト）**を入力して提出する。
+- **プログラム本体は「選んだ分析 ＋ 適用コード抜粋」**として記録する（自由記述コードの実行はしない）。
+  コード抜粋は読み込み済みフラグメントの `details.frag-code` の `<code>` から抽出する。
+- **提出は要ログイン（analyst 想定）**。未ログイン時は提出ボタンを無効化しログイン導線を出す
+  （**仮定**: 閲覧は誰でも可・提出のみ要ログインという素直なガード。ロールは owner/analyst
+  どちらでも提出できるが、ワークフロー上の主体は analyst）。
+- 提出物は `Alpine.store('submissions').add(dataset_id, {...})` で保存し、個別ページの
+  **「紐づく提出物」**に即時追加する（1 データセットに複数提出が並ぶ。提出者・対象分析・日時・
+  レポート・status='submitted'・コード抜粋を表示）。
+
+### 確定 Submission スキーマ（#26 の審査が読む前提）
+
+```
+Submission = {
+  id:            string,  // "sub-<seq>"（store が採番）
+  datasetId:     string,  // 対象データセット（= catalog.json の dataset_id）
+  analysis:      string,  // "clustering" | "association" | "survival"
+  analysisTitle: string,  // 分析の表示名
+  analyst:       string,  // 提出者（ログイン中ユーザー名）
+  report:        string,  // レポート（所見・メモ）
+  codeExcerpt:   string,  // 適用コード抜粋（フラグメント由来）
+  status:        string,  // "submitted"（初期値。審査での遷移は #26）
+  submittedAt:   string,  // ISO8601
+}
+```
+
+`store.add()` は `id` / `status` / `submittedAt` を未指定なら補完し、保存済みオブジェクトを返す。
+**`status` は #26（審査）が後から書き換える**前提で、ここでは常に `"submitted"` を初期値とする。
+
+### ユーザー登録データセットの扱い（仮定）
+
+- **仮定**: 分析フラグメントを持つ**同梱データセット（`prostate-psa` / `renal-marker`）のみ**提出可。
+  ユーザー登録分（`user-<n>`）は分析フラグメント未生成のためワークベンチ・提出 UI を出さない
+  （§7.7 の「分析未提供」注記のまま）。本番では TRE が登録時に合成データ・フラグメントを用意する。
+
+### 本番との対応
+
+| 関心事 | モック（本リポジトリ） | 本番プロトタイプ |
+|--------|------------------------|------------------|
+| 分析実行 | `htmx.ajax` で静的 `.html`（事前計算） | FastAPI が scikit-learn でジョブ実行し HTML 返却 |
+| プログラム | 既存 3 分析から選択 ＋ コード抜粋を記録 | サンドボックス内でのコード実行（隔離） |
+| 提出物保存 | Alpine 共有ストア（in-memory） | サーバー側ジョブ状態 + DB |
+| 認可 | 提出のみ要ログイン（UX 用ガード） | サーバー側で強制（ロール・データセット権限） |
 
 ## 8. 合成データ生成方針（mockdata-generator の思想）
 

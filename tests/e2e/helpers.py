@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from playwright.sync_api import Page
+from playwright.sync_api import Page, expect
 
 # 分析の網羅対象。
 ANALYSES = ["clustering", "association", "survival"]
@@ -70,6 +70,39 @@ def open_app(page: Page, base_url: str) -> None:
     page.wait_for_selector(
         "section.panel:has(h2:has-text('合成データを公開する'))", state="visible"
     )
+
+
+def open_workbench(
+    page: Page, base_url: str, *, name: str, role: str, dataset_id: str = "prostate-psa"
+) -> None:
+    """指定ロールでログイン→個別ページ→分析ワークベンチを開いて待つ(#25)。
+
+    `open_app` は owner 固定だが、提出フロー(#25)は analyst を主体に検証したいため、
+    ログインユーザーを差し替えられる版を用意する。
+    """
+    goto_app(page, base_url)
+    login(page, name, role)
+    page.get_by_test_id("nav-explore").click()
+    page.wait_for_selector("[data-testid='explore-view']", state="visible")
+    page.wait_for_selector("[data-testid='catalog-card']", state="visible")
+    page.locator(
+        f"[data-testid='catalog-card'][data-dataset-id='{dataset_id}'] [data-testid='catalog-open']"
+    ).click()
+    page.wait_for_selector("[data-testid='dataset-view']", state="visible")
+    page.wait_for_selector("[data-testid='dataset-title']", state="visible")
+    page.get_by_test_id("open-workbench").click()
+    page.wait_for_selector(
+        "section.panel:has(h2:has-text('合成データを公開する'))", state="visible"
+    )
+
+
+def open_analyze_tab(page: Page) -> None:
+    """ワークベンチの公開→分析タブまで進めて待つ(提出フローの前段)。"""
+    page.locator("section.panel button.primary").first.click()  # 公開
+    page.get_by_role("tab", name="② 分析者：ワークベンチ").click()
+    expect(
+        page.locator("section.panel:has(h2:has-text('合成データで分析を開発する'))")
+    ).to_be_visible()
 
 
 def alpine_state(page: Page) -> dict:
