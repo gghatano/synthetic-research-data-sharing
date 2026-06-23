@@ -26,9 +26,12 @@
         user: null, // { name, role } | null
         view: "login", // login | top | register | explore | dataset
         currentDatasetId: null, // dataset ビューで表示中のデータセット
+        // プリセット(デモ)アカウント。ロールは「アカウントに紐づく」(画面で選ばない)。
+        // password は擬似デモ用の平文定数(本物の認証・ハッシュ化はしない)。モックのため
+        // パスワードは UI 上でも開示してログインできるようにする(login-hint)。
         presets: [
-          { name: "保田 オーナー", role: "owner" },
-          { name: "分析 太郎", role: "analyst" },
+          { name: "保田 オーナー", role: "owner", password: "owner-demo" },
+          { name: "分析 太郎", role: "analyst", password: "analyst-demo" },
         ],
         isAuthed() {
           return this.user !== null;
@@ -36,10 +39,15 @@
         roleLabel(role) {
           return { owner: "データオーナー", analyst: "分析者" }[role] || role;
         },
-        login(name, role) {
+        // 擬似ログイン: ユーザー名＋パスワード(擬似)。実認証・ハッシュ化はしない。
+        // 入力ユーザー名に一致するプリセットを探し、パスワードも一致したらログイン成立。
+        // ロールはアカウント(プリセット)に紐づく値を採用する(画面では選ばない)。
+        // パスワードは user に保持しない(メモリ上の照合のみ)。
+        login(name, password) {
           const trimmed = (name || "").trim();
-          if (!trimmed || (role !== "owner" && role !== "analyst")) return false;
-          this.user = { name: trimmed, role };
+          const preset = this.presets.find((p) => p.name === trimmed);
+          if (!preset || preset.password !== password) return false;
+          this.user = { name: preset.name, role: preset.role };
           this.view = "top";
           return true;
         },
@@ -274,20 +282,33 @@
              x-show="$store.session.view === 'login'" x-cloak
              x-data="loginForm()">
       <h2>ログイン</h2>
-      <p>擬似ログインです。実際の認証は行いません。プリセットを選ぶか、ユーザー名を入力し
-        ロールを選んでください。</p>
+      <p>擬似ログインです(ユーザー名＋パスワード)。<strong>実際の認証は行いません</strong>。
+        ロールは<strong>アカウントに紐づく</strong>ため画面では選びません。下のプリセット
+        アカウントを選ぶと、ユーザー名とデモ用パスワードが自動入力されます。</p>
 
       <div class="login-presets">
-        <span class="login-label">プリセットユーザー</span>
+        <span class="login-label">プリセットアカウント(デモ)</span>
         <template x-for="p in $store.session.presets" :key="p.name">
           <button class="chip" type="button"
                   :data-testid="'preset-' + p.role"
-                  @click="name = p.name; role = p.role">
+                  @click="name = p.name; password = p.password; error = ''">
             <span x-text="p.name"></span>
-            <small x-text="'(' + $store.session.roleLabel(p.role) + ')'"></small>
+            <small x-text="'(' + $store.session.roleLabel(p.role) + ' / デモアカウント)'"></small>
           </button>
         </template>
       </div>
+
+      <!-- モックのためデモ用パスワードを開示する(これがないとログインできない) -->
+      <p class="login-hint frag-note" data-testid="login-hint">
+        デモ用アカウント(平文・擬似):
+        <template x-for="p in $store.session.presets" :key="p.name">
+          <span class="login-hint-item">
+            <code x-text="p.name"></code> /
+            <code x-text="p.password"></code>
+            <small x-text="'(' + $store.session.roleLabel(p.role) + ')'"></small>
+          </span>
+        </template>
+      </p>
 
       <form class="login-form" @submit.prevent="doLogin()">
         <label class="field">
@@ -296,19 +317,11 @@
                  placeholder="例: 分析 太郎" autocomplete="off" />
         </label>
 
-        <fieldset class="field role-field">
-          <legend class="login-label">ロール</legend>
-          <label class="radio">
-            <input type="radio" name="role" value="owner" x-model="role"
-                   data-testid="role-owner" />
-            <span>データオーナー (owner)</span>
-          </label>
-          <label class="radio">
-            <input type="radio" name="role" value="analyst" x-model="role"
-                   data-testid="role-analyst" />
-            <span>分析者 (analyst)</span>
-          </label>
-        </fieldset>
+        <label class="field">
+          <span class="login-label">パスワード</span>
+          <input type="password" data-testid="login-password" x-model="password"
+                 placeholder="デモ用パスワード" autocomplete="off" />
+        </label>
 
         <p class="login-error" data-testid="login-error" x-show="error" x-cloak
            x-text="error"></p>
@@ -1196,7 +1209,7 @@
     function loginForm() {
       return {
         name: "",
-        role: "",
+        password: "",
         error: "",
         doLogin() {
           this.error = "";
@@ -1204,11 +1217,12 @@
             this.error = "ユーザー名を入力してください。";
             return;
           }
-          if (this.role !== "owner" && this.role !== "analyst") {
-            this.error = "ロールを選択してください。";
-            return;
+          // 擬似ログイン: アカウント(プリセット)のユーザー名＋デモ用パスワードを照合。
+          // 成功すればロールはアカウントに紐づく値で確定する(画面では選ばない)。
+          const ok = this.$store.session.login(this.name, this.password);
+          if (!ok) {
+            this.error = "ユーザー名またはパスワードが違います。";
           }
-          this.$store.session.login(this.name, this.role);
         },
       };
     }

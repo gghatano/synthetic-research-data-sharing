@@ -12,7 +12,7 @@ from __future__ import annotations
 import pytest
 from playwright.sync_api import Page, expect
 
-from .helpers import goto_app, login, open_register
+from .helpers import ANALYST, goto_app, login, open_register
 
 pytestmark = pytest.mark.e2e
 
@@ -150,7 +150,7 @@ def test_register_user_dataset_detail_has_no_submit_form(page: Page, base_url: s
 def test_analyst_cannot_reach_register(page: Page, base_url: str) -> None:
     """analyst には登録導線が出ず、ストア API 経由でも register に入れない。"""
     goto_app(page, base_url)
-    login(page, "分析 太郎", "analyst")
+    login(page, *ANALYST)
     expect(page.get_by_test_id("nav-register")).to_be_hidden()
     page.evaluate("() => Alpine.store('session').go('register')")
     expect(page.get_by_test_id("register-view")).to_be_hidden()
