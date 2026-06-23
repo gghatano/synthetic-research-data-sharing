@@ -1,0 +1,52 @@
+<section class="fragment" data-kind="raw" data-analysis="survival">
+  <div class="frag-head">
+    <span class="badge badge-raw">生データ</span>
+    <h3>進行イベントの生存時間分析</h3>
+    <span class="frag-n">n = 150</span>
+  </div>
+
+  <div class="chart-box">
+    <canvas id="chart-raw-survival"></canvas>
+  </div>
+
+  <table class="frag-table">
+    <thead><tr><th>リスク群</th><th>n</th><th>イベント数</th><th>イベント率(%)</th>
+      <th>進行までの中央値(月)</th></tr></thead>
+    <tbody>
+      <tr><td><span class="dot dot-low"></span>low</td>
+        <td>48</td><td>5</td><td>10.4</td>
+        <td>23.9</td></tr>
+      <tr><td><span class="dot dot-intermediate"></span>intermediate</td>
+        <td>68</td><td>53</td><td>77.9</td>
+        <td>21.0</td></tr>
+      <tr><td><span class="dot dot-high"></span>high</td>
+        <td>34</td><td>33</td><td>97.1</td>
+        <td>21.0</td></tr>
+    </tbody>
+  </table>
+  <p class="frag-note">進行イベント = Phoenix 基準 (PSA ≥ nadir + 2.0 ng/mL)。
+    曲線は Kaplan-Meier 推定。</p>
+
+  <details class="frag-code">
+    <summary>適用された分析コード(抜粋)</summary>
+    <pre><code>tte = time_to_event(psa, delta=2.0)  # Phoenix 基準
+for risk, g in tte.groupby('risk_group'):
+    curve = kaplan_meier(g.time, g.observed)</code></pre>
+  </details>
+
+  <script type="application/json" id="cfg-raw-survival">{"type": "line", "data": {"datasets": [{"label": "low", "data": [{"x": 0.0, "y": 100.0}, {"x": 15.0, "y": 97.9}, {"x": 18.0, "y": 95.8}, {"x": 23.9, "y": 91.7}, {"x": 29.9, "y": 89.6}], "borderColor": "#2e7d32", "backgroundColor": "#2e7d32", "stepped": true, "pointRadius": 0, "fill": false}, {"label": "intermediate", "data": [{"x": 0.0, "y": 100.0}, {"x": 6.0, "y": 98.5}, {"x": 9.0, "y": 97.1}, {"x": 12.0, "y": 92.7}, {"x": 15.0, "y": 80.9}, {"x": 18.0, "y": 61.8}, {"x": 21.0, "y": 45.6}, {"x": 23.9, "y": 39.7}, {"x": 29.9, "y": 29.4}, {"x": 32.9, "y": 27.9}, {"x": 35.9, "y": 22.1}], "borderColor": "#f9a825", "backgroundColor": "#f9a825", "stepped": true, "pointRadius": 0, "fill": false}, {"label": "high", "data": [{"x": 0.0, "y": 100.0}, {"x": 6.0, "y": 97.1}, {"x": 12.0, "y": 94.1}, {"x": 15.0, "y": 70.6}, {"x": 18.0, "y": 55.9}, {"x": 21.0, "y": 35.3}, {"x": 23.9, "y": 20.6}, {"x": 26.9, "y": 11.8}, {"x": 29.9, "y": 8.8}, {"x": 32.9, "y": 2.9}], "borderColor": "#c62828", "backgroundColor": "#c62828", "stepped": true, "pointRadius": 0, "fill": false}]}, "options": {"responsive": true, "maintainAspectRatio": false, "plugins": {"legend": {"position": "bottom"}, "title": {"display": true, "text": "無進行生存率 (Kaplan-Meier)"}}, "scales": {"x": {"type": "linear", "title": {"display": true, "text": "月数"}}, "y": {"min": 0, "max": 100, "title": {"display": true, "text": "無進行生存率 (%)"}}}}}</script>
+  <script>
+    (function () {
+      var uid = "raw-survival";
+      function draw() {
+        var el = document.getElementById("chart-" + uid);
+        var cfgEl = document.getElementById("cfg-" + uid);
+        if (!el || !cfgEl || typeof Chart === "undefined") return;
+        var existing = Chart.getChart(el);   // 再読込時の二重描画を防ぐ
+        if (existing) existing.destroy();
+        new Chart(el.getContext("2d"), JSON.parse(cfgEl.textContent));
+      }
+      draw();
+    })();
+  </script>
+</section>
