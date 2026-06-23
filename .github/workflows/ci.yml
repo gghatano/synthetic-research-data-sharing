@@ -31,5 +31,26 @@ jobs:
       - name: Type check (mypy)
         run: uv run mypy generator
 
-      - name: Test (pytest)
+      - name: Test (pytest, unit)
         run: uv run pytest -q
+
+  e2e:
+    # ブラウザ実機による E2E。CDN(jsdelivr) 到達が必要。
+    # CDN 不通時は conftest が session 単位で skip する。
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Sync dependencies
+        run: uv sync --frozen
+
+      - name: Install Playwright chromium
+        run: uv run playwright install --with-deps chromium
+
+      - name: E2E (pytest -m e2e)
+        run: uv run pytest -m e2e
