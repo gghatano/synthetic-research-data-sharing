@@ -4,10 +4,6 @@ from __future__ import annotations
 
 from playwright.sync_api import Page
 
-# 分析の網羅対象。ワークベンチ撤去(#41)で現行テストからは未使用だが、
-# 合成≈生デモ面(#43, N4)の分析網羅テストで再利用するため残す。
-ANALYSES = ["clustering", "association", "survival"]
-
 # expect / アクションの既定タイムアウト(ミリ秒)。CDN/htmx 待ちに余裕を持たせる。
 DEFAULT_TIMEOUT_MS = 15_000
 
@@ -76,25 +72,3 @@ def open_dataset_as(
     ).click()
     page.wait_for_selector("[data-testid='dataset-view']", state="visible")
     page.wait_for_selector("[data-testid='dataset-title']", state="visible")
-
-
-# 以下 2 つの Chart ヘルパは、ワークベンチ撤去(#41)で現行テストからは未使用。
-# 合成≈生デモ面(#43, N4)で Chart 描画/二重描画ガードを検証する際に再利用する。
-def chart_is_drawn(page: Page, canvas_id: str) -> bool:
-    """canvas に Chart インスタンスが紐づいているか(Chart.getChart が truthy)。"""
-    return bool(
-        page.evaluate(
-            "(id) => { const el = document.getElementById(id); "
-            "return !!(el && typeof Chart !== 'undefined' && Chart.getChart(el)); }",
-            canvas_id,
-        )
-    )
-
-
-def wait_chart_drawn(page: Page, canvas_id: str) -> None:
-    """Chart.getChart(canvas) が truthy になるまでポーリング待機する。"""
-    page.wait_for_function(
-        "(id) => { const el = document.getElementById(id); "
-        "return !!(el && typeof Chart !== 'undefined' && Chart.getChart(el)); }",
-        arg=canvas_id,
-    )

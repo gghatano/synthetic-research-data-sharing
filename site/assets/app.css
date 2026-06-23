@@ -153,18 +153,12 @@ button.ghost {
 .hint { color: var(--muted); font-size: .9rem; }
 .hint a { color: var(--brand); }
 
-/* ---- analysis picker ---- */
-.analysis-picker { display: flex; gap: 8px; margin: 16px 0; flex-wrap: wrap; }
 .chip {
   border: 1px solid var(--line); background: #eef1f6; color: var(--ink);
   padding: 9px 14px; border-radius: 999px; cursor: pointer; font-size: .9rem;
 }
 .chip.sel { background: var(--brand); color: #fff; border-color: var(--brand); }
 
-.result-pane {
-  border: 1px dashed var(--line); border-radius: var(--radius); padding: 16px;
-  min-height: 80px; margin-top: 8px; background: #fcfdff;
-}
 .placeholder { color: var(--muted); font-style: italic; margin: 8px 0; }
 
 /* ---- fragment ---- */
@@ -194,11 +188,6 @@ button.ghost {
   overflow-x: auto; font-size: .82rem;
 }
 
-/* ---- review compare ---- */
-.compare { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0; }
-.col-head { margin: 0 0 8px; font-size: .95rem; padding: 6px 10px; border-radius: 8px; color: #fff; }
-.col-head.synthetic { background: var(--synthetic); }
-.col-head.raw { background: var(--raw); }
 .callout {
   background: #f3faf3; border: 1px solid #c5e1c5; border-radius: var(--radius);
   padding: 12px 14px; font-size: .9rem; margin: 6px 0 0;
@@ -398,15 +387,9 @@ button.ghost {
 /* 提出物カードの結果件数バッジ */
 .submission-results { color: var(--muted); font-size: .82rem; }
 
-/* 原理デモ面(カタログ外, #43, N4) */
-.demo-view { max-width: 1100px; margin: 0 auto; padding: 8px 0 24px; }
-.demo-head h2 { margin: 0 0 8px; }
-.demo-note { margin: 0 0 12px; }
-.demo-callout { margin-top: 16px; }
-
 .site-foot { text-align: center; color: var(--muted); font-size: .82rem; padding: 20px; }
 .site-foot a { color: var(--brand); }
 
 @media (max-width: 820px) {
-  .cards, .compare { grid-template-columns: 1fr; }
+  .cards { grid-template-columns: 1fr; }
 }
