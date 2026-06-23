@@ -10,7 +10,7 @@ from __future__ import annotations
 import pytest
 from playwright.sync_api import Page, expect
 
-from .helpers import open_dataset_as
+from .helpers import ANALYST, OWNER, open_dataset_as
 
 pytestmark = pytest.mark.e2e
 
@@ -50,7 +50,7 @@ def _user_card(page: Page):
 
 def test_owner_reviews_program_results_report_and_approves(page: Page, base_url: str) -> None:
     """owner が提出物のプログラム＋結果＋レポートを閲覧し、承認で approved になる。"""
-    open_dataset_as(page, base_url, name="保田 オーナー", role="owner")
+    open_dataset_as(page, base_url, name=OWNER[0], password=OWNER[1])
     _submit_one(page)
 
     # 審査を開く(プリセット #53 ではなくユーザー提出分を選ぶ)。
@@ -79,7 +79,7 @@ def test_owner_reviews_program_results_report_and_approves(page: Page, base_url:
 
 def test_review_has_no_raw_data_juxtaposition(page: Page, base_url: str) -> None:
     """審査ビューに生データ並置(合成 vs 生)が存在しない(核メッセージはデモ面へ移設)。"""
-    open_dataset_as(page, base_url, name="保田 オーナー", role="owner")
+    open_dataset_as(page, base_url, name=OWNER[0], password=OWNER[1])
     _submit_one(page, with_image=False)
     _user_card(page).get_by_test_id("review-open").click()
     expect(page.get_by_test_id("review-view")).to_be_visible()
@@ -92,7 +92,7 @@ def test_review_has_no_raw_data_juxtaposition(page: Page, base_url: str) -> None
 
 def test_analyst_has_no_review_affordance(page: Page, base_url: str) -> None:
     """analyst には審査導線が出ず、ガード注記が表示される。"""
-    open_dataset_as(page, base_url, name="分析 太郎", role="analyst")
+    open_dataset_as(page, base_url, name=ANALYST[0], password=ANALYST[1])
     _submit_one(page, with_image=False)
 
     # 審査ボタンは owner 限定(x-show)で非表示、ガード注記が出る。
@@ -103,7 +103,7 @@ def test_analyst_has_no_review_affordance(page: Page, base_url: str) -> None:
 
 def test_approved_submission_reopens_with_result(page: Page, base_url: str) -> None:
     """承認済み提出物を再度開くと、プログラム＋結果が復元表示される。"""
-    open_dataset_as(page, base_url, name="保田 オーナー", role="owner")
+    open_dataset_as(page, base_url, name=OWNER[0], password=OWNER[1])
     _submit_one(page, with_image=False)
     card = _user_card(page)
     card.get_by_test_id("review-open").click()
@@ -125,7 +125,7 @@ def _preset_card(page: Page, submission_id: str):
 
 def test_preset_submissions_seeded_on_dataset(page: Page, base_url: str) -> None:
     """初回表示でプリセット提出物(#53)が一覧に並び、提出ゼロでないこと。"""
-    open_dataset_as(page, base_url, name="保田 オーナー", role="owner")
+    open_dataset_as(page, base_url, name=OWNER[0], password=OWNER[1])
 
     # まだ手動提出していなくても、プリセットがカードとして見える。
     expect(_preset_card(page, "preset-1")).to_be_visible()
@@ -137,7 +137,7 @@ def test_preset_submissions_seeded_on_dataset(page: Page, base_url: str) -> None
 
 def test_preset_status_mix_submitted_and_approved(page: Page, base_url: str) -> None:
     """プリセットは submitted と approved を混在し、一覧の status 差が見える(#53)。"""
-    open_dataset_as(page, base_url, name="保田 オーナー", role="owner")
+    open_dataset_as(page, base_url, name=OWNER[0], password=OWNER[1])
 
     submitted = _preset_card(page, "preset-1")
     approved = _preset_card(page, "preset-2")
@@ -149,7 +149,7 @@ def test_preset_status_mix_submitted_and_approved(page: Page, base_url: str) -> 
 
 def test_preset_submission_program_results_report_viewable(page: Page, base_url: str) -> None:
     """プリセット(#53)を審査ビューで開くと、プログラム＋結果＋レポートが閲覧できる。"""
-    open_dataset_as(page, base_url, name="保田 オーナー", role="owner")
+    open_dataset_as(page, base_url, name=OWNER[0], password=OWNER[1])
 
     _preset_card(page, "preset-1").get_by_test_id("review-open").click()
     review = page.get_by_test_id("review-view")
@@ -164,7 +164,7 @@ def test_preset_submission_program_results_report_viewable(page: Page, base_url:
 
 def test_preset_approved_shows_review_result_button(page: Page, base_url: str) -> None:
     """承認済みプリセットは「審査結果を見る」で開け、承認ボタンが無効(#53)。"""
-    open_dataset_as(page, base_url, name="保田 オーナー", role="owner")
+    open_dataset_as(page, base_url, name=OWNER[0], password=OWNER[1])
 
     approved = _preset_card(page, "preset-2")
     expect(approved.get_by_test_id("review-open")).to_have_text("審査結果を見る")
@@ -177,7 +177,7 @@ def test_preset_approved_shows_review_result_button(page: Page, base_url: str) -
 
 def test_preset_does_not_collide_with_user_submission_ids(page: Page, base_url: str) -> None:
     """プリセット(preset-<n>)が seq を進めず、ユーザー提出は sub-<n> でユニーク採番(#53)。"""
-    open_dataset_as(page, base_url, name="分析 太郎", role="analyst")
+    open_dataset_as(page, base_url, name=ANALYST[0], password=ANALYST[1])
 
     # デモ提出を 2 回 → 別々の sub-<n> が付き、プリセットと混ざらない。
     page.get_by_test_id("submit-demo").click()

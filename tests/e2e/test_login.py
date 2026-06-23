@@ -9,7 +9,7 @@ from __future__ import annotations
 import pytest
 from playwright.sync_api import Page, expect
 
-from .helpers import goto_app, login
+from .helpers import ANALYST, OWNER, goto_app, login
 
 pytestmark = pytest.mark.e2e
 
@@ -19,7 +19,7 @@ def test_login_owner_to_top(page: Page, base_url: str) -> None:
     goto_app(page, base_url)
     expect(page.get_by_test_id("login-view")).to_be_visible()
 
-    login(page, "保田 オーナー", "owner")
+    login(page, *OWNER)
 
     expect(page.get_by_test_id("top-view")).to_be_visible()
     expect(page.get_by_test_id("login-view")).to_be_hidden()
@@ -29,11 +29,26 @@ def test_login_owner_to_top(page: Page, base_url: str) -> None:
     expect(page.get_by_test_id("nav-register")).to_be_visible()
 
 
+def test_login_form_is_username_password_no_role_radio(page: Page, base_url: str) -> None:
+    """ログインフォームはユーザー名＋パスワード。ロール選択ラジオは存在しない(#66)。"""
+    goto_app(page, base_url)
+    # ユーザー名・パスワード・送信・カタログ導線・ヒントは出る。
+    expect(page.get_by_test_id("login-name")).to_be_visible()
+    expect(page.get_by_test_id("login-password")).to_be_visible()
+    expect(page.get_by_test_id("login-submit")).to_be_visible()
+    expect(page.get_by_test_id("login-to-catalog")).to_be_visible()
+    expect(page.get_by_test_id("login-hint")).to_be_visible()
+    # ロール選択ラジオは撤去済み。
+    assert page.get_by_test_id("role-owner").count() == 0
+    assert page.get_by_test_id("role-analyst").count() == 0
+
+
 def test_login_preset_fills_form(page: Page, base_url: str) -> None:
-    """プリセット選択で名前/ロールが埋まり、そのままログインできる。"""
+    """プリセット選択でユーザー名＋デモパスワードが埋まり、そのままログインできる。"""
     goto_app(page, base_url)
     page.get_by_test_id("preset-analyst").click()
-    expect(page.get_by_test_id("login-name")).to_have_value("分析 太郎")
+    expect(page.get_by_test_id("login-name")).to_have_value(ANALYST[0])
+    expect(page.get_by_test_id("login-password")).to_have_value(ANALYST[1])
     page.get_by_test_id("login-submit").click()
     expect(page.get_by_test_id("top-view")).to_be_visible()
 
@@ -41,31 +56,49 @@ def test_login_preset_fills_form(page: Page, base_url: str) -> None:
 def test_analyst_cannot_see_register(page: Page, base_url: str) -> None:
     """analyst ではデータ登録の導線が出ない(owner 専用の出し分け)。"""
     goto_app(page, base_url)
-    login(page, "分析 太郎", "analyst")
+    login(page, *ANALYST)
 
     expect(page.get_by_test_id("card-explore")).to_be_visible()
     expect(page.get_by_test_id("card-register")).to_be_hidden()
     expect(page.get_by_test_id("nav-register")).to_be_hidden()
 
 
-def test_login_validation_errors(page: Page, base_url: str) -> None:
-    """名前未入力・ロール未選択ではログインできずエラーが出る。"""
+def test_login_wrong_password_shows_error(page: Page, base_url: str) -> None:
+    """ユーザー名未入力・存在しないユーザー・誤パスワードはログインできずエラーが出る。"""
     goto_app(page, base_url)
     # 名前なし
     page.get_by_test_id("login-submit").click()
     expect(page.get_by_test_id("login-error")).to_be_visible()
     expect(page.get_by_test_id("top-view")).to_be_hidden()
-    # 名前ありロールなし
+    # 存在しないユーザー名
     page.get_by_test_id("login-name").fill("名無し")
+    page.get_by_test_id("login-password").fill("whatever")
+    page.get_by_test_id("login-submit").click()
+    expect(page.get_by_test_id("login-error")).to_be_visible()
+    expect(page.get_by_test_id("top-view")).to_be_hidden()
+    # 正しいユーザー名・誤ったパスワード
+    page.get_by_test_id("login-name").fill(OWNER[0])
+    page.get_by_test_id("login-password").fill("wrong-password")
     page.get_by_test_id("login-submit").click()
     expect(page.get_by_test_id("login-error")).to_be_visible()
     expect(page.get_by_test_id("top-view")).to_be_hidden()
 
 
+def test_login_correct_password_to_top(page: Page, base_url: str) -> None:
+    """正しいユーザー名＋パスワードでトップへ遷移し、ロールはアカウント由来になる。"""
+    goto_app(page, base_url)
+    page.get_by_test_id("login-name").fill(ANALYST[0])
+    page.get_by_test_id("login-password").fill(ANALYST[1])
+    page.get_by_test_id("login-submit").click()
+    expect(page.get_by_test_id("top-view")).to_be_visible()
+    # analyst アカウントなので登録導線は出ない(ロールはアカウントに紐づく)。
+    expect(page.get_by_test_id("card-register")).to_be_hidden()
+
+
 def test_logout_returns_to_login(page: Page, base_url: str) -> None:
     """ログアウトでストアが破棄され、ログイン画面へ戻る。"""
     goto_app(page, base_url)
-    login(page, "保田 オーナー", "owner")
+    login(page, *OWNER)
     page.get_by_test_id("logout").click()
 
     expect(page.get_by_test_id("login-view")).to_be_visible()
@@ -110,7 +143,7 @@ def test_catalog_public_without_login(page: Page, base_url: str) -> None:
 def test_analyst_register_guard(page: Page, base_url: str) -> None:
     """analyst が register ビューへ遷移しようとしてもトップへ戻される(ロールガード)。"""
     goto_app(page, base_url)
-    login(page, "分析 太郎", "analyst")
+    login(page, *ANALYST)
     page.evaluate("() => Alpine.store('session').go('register')")
     expect(page.get_by_test_id("top-view")).to_be_visible()
     expect(page.get_by_test_id("register-view")).to_be_hidden()
@@ -119,7 +152,7 @@ def test_analyst_register_guard(page: Page, base_url: str) -> None:
 def test_nav_to_explore_shows_catalog(page: Page, base_url: str) -> None:
     """データカタログビューで catalog.json 由来のカードが表示される。"""
     goto_app(page, base_url)
-    login(page, "保田 オーナー", "owner")
+    login(page, *OWNER)
     page.get_by_test_id("nav-explore").click()
     expect(page.get_by_test_id("explore-view")).to_be_visible()
     page.wait_for_selector("[data-testid='catalog-card']", state="visible")
