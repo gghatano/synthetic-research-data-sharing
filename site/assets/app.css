@@ -391,6 +391,8 @@ button.ghost {
 .submit-upload .field { margin-top: 12px; }
 .submit-upload textarea { width: 100%; box-sizing: border-box; }
 .submit-upload input[type="file"] { margin-top: 4px; font-size: .9rem; }
+/* デモ用ワンクリック提出ボックス(#52)。手動提出 actions の下に置く。 */
+.submit-demo { margin: 16px 0 0; }
 .result-image-preview { margin: 8px 0 0; display: flex; align-items: center; gap: 10px; }
 .result-thumb {
   max-width: 220px; max-height: 160px; border: 1px solid var(--line);
