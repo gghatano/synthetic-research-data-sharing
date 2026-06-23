@@ -51,3 +51,5 @@ files = ["generator"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+# リポジトリルートを import パスに加え、`from generator import ...` を解決する。
+pythonpath = ["."]
