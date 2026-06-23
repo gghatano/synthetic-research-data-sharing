@@ -50,7 +50,8 @@ def test_submit_program_and_text_result(page: Page, base_url: str) -> None:
 
     expect(page.get_by_test_id("submit-success")).to_be_visible()
 
-    card = page.get_by_test_id("submission-card").first
+    # プリセット(#53)が初期配置されるため、ユーザー提出分(sub-<n>)に絞って検証する。
+    card = page.locator("[data-testid='submission-card'][data-submission-id^='sub-']").last
     expect(card).to_be_visible()
     expect(card.get_by_test_id("submission-program")).to_have_text("analysis.py")
     expect(card.get_by_test_id("submission-status")).to_have_text("submitted")
@@ -72,7 +73,8 @@ def test_submit_program_and_image_result(page: Page, base_url: str) -> None:
     assert (preview.locator("img").get_attribute("src") or "").startswith("data:image/")
 
     page.get_by_test_id("submit-to-dataset").click()
-    card = page.get_by_test_id("submission-card").first
+    # プリセット(#53)と混在するため、ユーザー提出分(sub-<n>)の最新を見る。
+    card = page.locator("[data-testid='submission-card'][data-submission-id^='sub-']").last
     expect(card.get_by_test_id("submission-results-count")).to_contain_text("結果 1 件")
 
 
@@ -98,7 +100,8 @@ def test_submit_validation_missing_program(page: Page, base_url: str) -> None:
     page.get_by_test_id("submit-result-text").fill("結果のみ")
     page.get_by_test_id("submit-to-dataset").click()
     expect(page.get_by_test_id("submit-error")).to_be_visible()
-    assert page.get_by_test_id("submission-card").count() == 0
+    # プリセット(#53)は残るが、ユーザー提出分(sub-<n>)は 1 件も増えない。
+    assert page.locator("[data-testid='submission-card'][data-submission-id^='sub-']").count() == 0
 
 
 def test_result_image_rejects_svg(page: Page, base_url: str) -> None:
@@ -121,7 +124,8 @@ def test_submit_validation_missing_result(page: Page, base_url: str) -> None:
     _set_program(page)
     page.get_by_test_id("submit-to-dataset").click()
     expect(page.get_by_test_id("submit-error")).to_be_visible()
-    assert page.get_by_test_id("submission-card").count() == 0
+    # プリセット(#53)は残るが、ユーザー提出分(sub-<n>)は 1 件も増えない。
+    assert page.locator("[data-testid='submission-card'][data-submission-id^='sub-']").count() == 0
 
 
 def test_uploaded_program_is_not_executed_xss_safe(page: Page, base_url: str) -> None:
@@ -141,7 +145,8 @@ def test_uploaded_program_is_not_executed_xss_safe(page: Page, base_url: str) ->
     # 提出後、一覧カードのプログラム名も x-text 表示(ファイル名のタグが実体化しない)。
     page.get_by_test_id("submit-result-text").fill("<b>not-bold</b>")
     page.get_by_test_id("submit-to-dataset").click()
-    card = page.get_by_test_id("submission-card").first
+    # プリセット(#53)と混在するため、ユーザー提出分(sub-<n>)の最新を見る。
+    card = page.locator("[data-testid='submission-card'][data-submission-id^='sub-']").last
     expect(card.get_by_test_id("submission-program")).to_contain_text(
         "<img src=x onerror=alert(1)>.py"
     )
@@ -152,13 +157,14 @@ def test_submit_demo_sample(page: Page, base_url: str) -> None:
     """デモ用サンプル提出ボタンで、ファイル準備なしに提出物が一覧に追加される(#52)。"""
     open_dataset_as(page, base_url, name="分析 太郎", role="analyst")
 
-    # 提出前は提出物ゼロ。
-    assert page.get_by_test_id("submission-card").count() == 0
+    # 提出前、ユーザー提出分(sub-<n>)はゼロ(プリセット #53 は別 id 体系で混ざらない)。
+    user_cards = page.locator("[data-testid='submission-card'][data-submission-id^='sub-']")
+    assert user_cards.count() == 0
 
     page.get_by_test_id("submit-demo").click()
     expect(page.get_by_test_id("submit-success")).to_be_visible()
 
-    card = page.get_by_test_id("submission-card").first
+    card = user_cards.last
     expect(card).to_be_visible()
     # 内蔵サンプル(1 件目)が手動提出と同形で表示される。
     expect(card.get_by_test_id("submission-program")).to_have_text("clustering.py")
@@ -173,7 +179,8 @@ def test_submit_demo_cycles_samples(page: Page, base_url: str) -> None:
     page.get_by_test_id("submit-demo").click()
     page.get_by_test_id("submit-demo").click()
 
-    cards = page.get_by_test_id("submission-card")
+    # プリセット(#53)と区別するため、ユーザー提出分(sub-<n>)のみを数える。
+    cards = page.locator("[data-testid='submission-card'][data-submission-id^='sub-']")
     expect(cards).to_have_count(2)
     # 巡回: 2 クリックで別々のサンプル名が並ぶ(最新が先頭表示でなくても両方存在する)。
     names = cards.locator("[data-testid='submission-program']").all_inner_texts()

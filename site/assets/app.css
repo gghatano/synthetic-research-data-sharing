@@ -332,6 +332,12 @@ button.ghost {
 .submission-head { display: flex; align-items: center; gap: 12px; }
 .submission-head strong { flex: 1; }
 .submission-card .role-pill { background: #eef1f6; border: 1px solid var(--line); color: var(--muted); }
+/* デモ用プリセット提出物の目印(#53。架空成果物であることを示す小バッジ) */
+.preset-badge {
+  display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: .72rem;
+  font-weight: 700; letter-spacing: .04em; background: #fff4e5; border: 1px solid #f0c98a;
+  color: #9a6a16;
+}
 .submission-meta {
   display: flex; gap: 14px; flex-wrap: wrap; margin: 0; color: var(--muted); font-size: .85rem;
 }
