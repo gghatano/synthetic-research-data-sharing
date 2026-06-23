@@ -139,6 +139,13 @@ button.primary {
 }
 button.primary:hover { background: var(--brand-dark); }
 button.primary:disabled { background: #9fb3cc; cursor: default; }
+/* 合成データのダウンロード導線(#40): button.primary と同じ見た目のアンカー。 */
+a.primary.download-link {
+  display: inline-block; background: var(--brand); color: #fff; border: none;
+  padding: 11px 20px; border-radius: 8px; font-size: .95rem; font-weight: 600;
+  text-decoration: none;
+}
+a.primary.download-link:hover { background: var(--brand-dark); }
 button.ghost {
   background: transparent; border: 1px solid var(--brand); color: var(--brand);
   padding: 10px 16px; border-radius: 8px; cursor: pointer;
@@ -350,6 +357,23 @@ button.ghost {
   padding: 12px 14px; font-size: .9rem; margin: 6px 0 0;
 }
 .review-callout strong { color: var(--green); }
+.review-callout a { color: var(--brand); }
+
+/* 審査ビューの提出物表示(プログラム＋結果, #42, N3) */
+.review-program { margin: 12px 0; }
+.review-program h4, .review-results h4 { margin: 0 0 6px; font-size: .92rem; }
+.frag-code-block {
+  margin: 0; padding: 12px; background: #0f172a; color: #e2e8f0;
+  border-radius: 8px; overflow-x: auto; font-size: .82rem; line-height: 1.5;
+}
+.review-results { margin: 12px 0; }
+.review-result { margin: 8px 0; }
+.review-result-figure { margin: 0; }
+.review-result h5 { margin: 0 0 4px; font-size: .88rem; color: var(--muted); }
+.result-text {
+  margin: 0; padding: 10px 12px; background: #fff; border: 1px solid var(--line);
+  border-radius: 8px; overflow-x: auto; font-size: .85rem; white-space: pre-wrap;
+}
 
 /* 提出物の登録ブロック(分析ワークベンチ内, #25) */
 .submit-block {
@@ -360,6 +384,25 @@ button.ghost {
 .submit-block textarea { width: 100%; box-sizing: border-box; }
 .submit-hint { color: var(--muted); font-size: .9rem; }
 .submit-hint a { color: var(--brand); }
+
+/* プログラム＋結果アップロード提出フォーム(#41, N2) */
+.submit-upload { margin-top: 12px; }
+.submit-upload .field { margin-top: 12px; }
+.submit-upload textarea { width: 100%; box-sizing: border-box; }
+.submit-upload input[type="file"] { margin-top: 4px; font-size: .9rem; }
+.result-image-preview { margin: 8px 0 0; display: flex; align-items: center; gap: 10px; }
+.result-thumb {
+  max-width: 220px; max-height: 160px; border: 1px solid var(--line);
+  border-radius: 6px; background: #fff;
+}
+/* 提出物カードの結果件数バッジ */
+.submission-results { color: var(--muted); font-size: .82rem; }
+
+/* 原理デモ面(カタログ外, #43, N4) */
+.demo-view { max-width: 1100px; margin: 0 auto; padding: 8px 0 24px; }
+.demo-head h2 { margin: 0 0 8px; }
+.demo-note { margin: 0 0 12px; }
+.demo-callout { margin-top: 16px; }
 
 .site-foot { text-align: center; color: var(--muted); font-size: .82rem; padding: 20px; }
 .site-foot a { color: var(--brand); }
