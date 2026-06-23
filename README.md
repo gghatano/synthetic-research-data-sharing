@@ -24,21 +24,30 @@ make serve      # http://localhost:8000/ で確認
 > 依存・実行・検証は [uv](https://docs.astral.sh/uv/) 経由（`make` は内部で `uv run python` を使用）。
 > `make` が無ければ `uv run python -m generator.generate_data && uv run python -m generator.render`。
 
-`make serve` を開いたら、上部タブで 3 ロールを順に体験できます。
+`make serve` を開くと、**ログインシェル＋データカタログ**のデモを操作できます。
+ログインは擬似（in-memory な `Alpine.store`、localStorage 不使用でリロードするとリセット）で、
+カタログ閲覧（explore）と各データセットの個別ページは**未ログインでも閲覧可能**です。
 
-1. **① オーナー：公開** … 生データは「🔒 非公開」のまま、合成データを公開
-2. **② 分析者：ワークベンチ** … 分析を選ぶと合成データの結果が htmx で読み込まれる → 提出
-3. **③ オーナー：審査** … 承認すると同一コードを生データに適用し、合成 vs 生 を並べて比較
+1. **カタログを見る** … 未ログインでもカタログ一覧（`catalog.json` 由来）と
+   データセット個別ページを閲覧できる
+2. **オーナー：データセット登録** … オーナーでログインし、メタデータ＋ダミーデータ（同梱サンプル選択 or
+   JSON アップロード）で合成データセットを登録する（ワンクリックのデモ登録もあり）
+3. **分析者：合成データをダウンロード** … データセット個別ページから合成データを
+   **JSON** および**テーブル単位の CSV** で取得して手元に持ち帰る（生データ raw は UI からリンクしない）
+4. **分析者：プログラム＋結果＋レポートを提出** … 分析プログラム・結果・レポートをアップロードして提出する
+   （プログラムは実行せず表示・保管のみ。サンプルを入れるワンクリックのデモ提出もあり）
+5. **オーナー：審査・承認** … 提出物（プログラム＋結果＋レポート）を確認し、承認すると
+   状態が `submitted → approved` に遷移する
 
 ## 技術構成
 
 | 層 | このデモ（モック / GitHub Pages） | 本番プロトタイプ想定 |
 |----|-----------------------------------|----------------------|
-| フロント | 素の HTML + **htmx** + **Alpine.js** + **Chart.js**（CDN, ビルドなし） | 同じ（htmx + Alpine + Chart.js） |
-| フラグメント供給 | 事前生成した静的 `.html` を htmx が `hx-get` | **FastAPI** エンドポイントが Jinja2 で同形の HTML を返す |
+| フロント | 素の HTML + **htmx** + **Alpine.js**（CDN, ビルドなし） | 同じ（htmx + Alpine） |
+| フラグメント供給 | 事前生成した静的 `.html` を htmx が `hx-get`（描画用に **Chart.js** は generator が出力するフラグメント内でのみ使用） | **FastAPI** エンドポイントが Jinja2 で同形の HTML を返す |
 | 分析実行 | Python で **事前計算**（pandas / scikit-learn） | サーバー側で **オンデマンド実行**（同じ分析コード） |
-| ワークフロー状態 | Alpine.js（`published→submitted→approved`） | サーバー側のジョブ状態 + htmx |
-| 生データ保護 | 生データJSONは「非公開」表示で擬似 | TRE 内に隔離、分析者からアクセス不可 |
+| ワークフロー状態 | Alpine.js（カタログ／提出物を in-memory 管理、`submitted→approved`） | サーバー側のジョブ状態 + htmx |
+| 生データ保護 | 生データJSONは UI から一切リンクせず擬似的に隔離 | TRE 内に隔離、分析者からアクセス不可 |
 
 htmx 用マークアップ（`generator/templates/`）と Python 分析コード（`generator/analyses.py`）は
 **そのまま本番 FastAPI + htmx に移植可能** な形にしています。モックで「擬似」なのは
@@ -57,10 +66,13 @@ htmx 用マークアップ（`generator/templates/`）と Python 分析コード
 │   ├── render.py           # Jinja2 で HTML フラグメントを事前生成
 │   └── templates/          # 本番htmxへ移植可能な Jinja2 テンプレート
 ├── site/                   # ★ GitHub Pages 公開ルート
-│   ├── index.html          # htmx + Alpine.js シェル（3ロールUI）
+│   ├── index.html          # htmx + Alpine.js のカタログ／ログインシェル
 │   ├── assets/app.css
-│   ├── data/{raw,synthetic}.json        # 生成物
-│   └── fragments/{analyst,owner}/*.html # 生成物
+│   ├── data/
+│   │   ├── catalog.json                     # データセット一覧（生成物）
+│   │   └── <dataset_id>/{raw,synthetic}.json # データセット別データ（生成物）
+│   └── fragments/
+│       └── <dataset_id>/{analyst,owner}/*.html # データセット別フラグメント（生成物）
 └── .github/workflows/deploy.yml         # build → Pages デプロイ
 ```
 
