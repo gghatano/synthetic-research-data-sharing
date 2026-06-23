@@ -126,7 +126,7 @@ IC-6（独立。IC-1 のフィクスチャがあると安全）
 4. 各 Issue: 検証 → code-reviewer →（必要時 security-reviewer）→ PR → Issue へ検証結果コメント。
 
 ## 実装開始前に確認すべき論点
-- **gh の host 不一致**: `gh` は社内 Enterprise 認証、origin は github.com の可能性。
-  Issue/PR を gh で操作するか、Web UI / git 手動にするかを先に決める（branch-worktree-policy.md）。
+- ~~gh の host 不一致~~ → **解決済み**。gh は github.com に gghatano(ADMIN) で認証済みで、
+  本リポジトリでは自動的に gghatano が使われる。`gh issue create` 等がそのまま使える。
 - **IC-3 の許容レンジ**: 「近い」の数値基準は SPEC 未規定。dev 観測で決め、仮定を Issue に明記。
 - **IC-5 と IC-6 の順序**: CI で mypy を必須にするなら IC-6 を先行させるか、段階導入するか。

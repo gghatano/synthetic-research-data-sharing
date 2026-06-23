@@ -13,12 +13,14 @@
 - 1 つの worktree で複数 Issue の変更を混ぜない
 - 生成物（site/data, site/fragments）を worktree でも手編集しない（PreToolUse フックがブロック）
 
-## 前提確認（実行前に必ず）
+## 前提確認（実行前に）
 ```bash
-git remote -v          # origin の host を確認
-gh auth status         # gh の認証 host が origin と一致するか確認
+git remote -v          # origin: github.com:gghatano/...
+gh auth status         # github.com に gghatano(ADMIN) で認証済み
 ```
-host が一致しない場合は「gh を使わない場合」の手順を使う。
+このリポジトリでは gh が自動的に github.com / gghatano を使う（社内 Enterprise の
+hatano-takuma とは別ホストで競合しない）。よって以下の「gh を使う場合」が標準。
+gh が使えない環境（CI 等で未認証）では「gh を使わない場合」を使う。
 
 ## 作成 — gh を使う場合（host 一致時）
 ```bash

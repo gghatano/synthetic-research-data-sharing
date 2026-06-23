@@ -92,7 +92,8 @@ gh issue comment <n> --body-file progress.md
 gh issue close <n>
 ```
 
-> 注: この環境の `gh` は社内 Enterprise host に認証されている一方、本リポジトリの origin は
-> github.com の可能性がある。host 不一致時は `gh` の代わりに git/手動で Issue 連携する
-> （branch-worktree-policy.md の「gh を使わない場合」を参照）。実行前に
-> `git remote -v` と `gh auth status` の host 一致を確認すること。
+> 認証メモ: origin は github.com（gghatano 所有）。`gh` は github.com に `gghatano`（ADMIN）で
+> 認証済みで、このリポジトリ内では自動的に github.com / gghatano が選ばれる（社内 Enterprise の
+> `hatano-takuma` とは別ホストなので競合しない）。よって `gh issue create` 等はそのまま使える。
+> 別アカウントへ切替えるときは `gh auth switch`。実行前に念のため
+> `git remote -v` と `gh auth status` を確認するとよい。
