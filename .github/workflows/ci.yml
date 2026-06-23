@@ -1,0 +1,35 @@
+name: CI
+
+# push と pull_request で品質ゲート(lint / format / 型チェック / テスト)を実行する。
+# いずれかが失敗すると job が落ちる(ブロッキング)。
+
+on: [push, pull_request]
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Sync dependencies
+        run: uv sync --frozen
+
+      - name: Lint (ruff check)
+        run: uv run ruff check .
+
+      - name: Format check (ruff format --check)
+        run: uv run ruff format --check .
+
+      - name: Type check (mypy)
+        run: uv run mypy generator
+
+      - name: Test (pytest)
+        run: uv run pytest -q
