@@ -44,7 +44,7 @@ make serve      # http://localhost:8000/ で確認
 | 層 | このデモ（モック / GitHub Pages） | 本番プロトタイプ想定 |
 |----|-----------------------------------|----------------------|
 | フロント | 素の HTML + **htmx** + **Alpine.js**（CDN, ビルドなし） | 同じ（htmx + Alpine） |
-| フラグメント供給 | 事前生成した静的 `.html` を htmx が `hx-get`（描画用に **Chart.js** は generator が出力するフラグメント内でのみ使用） | **FastAPI** エンドポイントが Jinja2 で同形の HTML を返す |
+| フラグメント供給 | generator が静的 `.html` を事前生成（**Chart.js** はそのフラグメント内でのみ使用＝ライブシェルは未ロード） | **FastAPI** エンドポイントが Jinja2 で同形の HTML を返す |
 | 分析実行 | Python で **事前計算**（pandas / scikit-learn） | サーバー側で **オンデマンド実行**（同じ分析コード） |
 | ワークフロー状態 | Alpine.js（カタログ／提出物を in-memory 管理、`submitted→approved`） | サーバー側のジョブ状態 + htmx |
 | 生データ保護 | 生データJSONは UI から一切リンクせず擬似的に隔離 | TRE 内に隔離、分析者からアクセス不可 |
