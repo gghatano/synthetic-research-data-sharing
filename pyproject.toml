@@ -1,0 +1,24 @@
+# Python ツール設定（lint / format / typecheck / test）。
+# パッケージ配布は行わない（ビルド対象はあくまで site/）。
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = ["site"]
+
+[tool.ruff.lint]
+# E/F: pyflakes+pycodestyle, I: import 整列, UP: pyupgrade, B: bugbear
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.mypy]
+python_version = "3.11"
+# pandas / sklearn / jinja2 は型情報が不完全なため未解決 import を無視する
+ignore_missing_imports = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+no_implicit_optional = true
+files = ["generator"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
