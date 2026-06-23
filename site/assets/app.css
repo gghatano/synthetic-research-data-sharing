@@ -220,6 +220,45 @@ button.ghost {
 .nav-card p { flex: 1 1 auto; }
 .nav-card .primary { align-self: flex-start; margin-top: 8px; }
 
+/* ---- register form (#24, owner 専用) ---- */
+.register-panel { max-width: 760px; }
+.register-intro { color: var(--ink); margin: 0 0 12px; }
+.register-intro strong { color: var(--brand); }
+.linklike {
+  background: none; border: none; padding: 0; color: var(--brand); font: inherit;
+  cursor: pointer; text-decoration: underline;
+}
+.register-disclaimer {
+  background: #fff8ec; border: 1px solid #f0dcb0; border-radius: var(--radius);
+  padding: 12px 14px; font-size: .85rem; color: #6b5a30; margin: 0 0 18px; line-height: 1.55;
+}
+.register-disclaimer strong { color: #8a6d1f; }
+.register-form { display: flex; flex-direction: column; gap: 16px; }
+.register-form input[type="text"],
+.register-form input[type="number"],
+.register-form textarea,
+.register-form select {
+  width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px;
+  font-size: .95rem; background: #fcfdff; font-family: inherit; box-sizing: border-box;
+}
+.register-form textarea { resize: vertical; }
+.req { color: var(--raw); }
+.reg-row { display: flex; gap: 16px; flex-wrap: wrap; }
+.reg-row .field { flex: 1 1 200px; }
+.reg-source {
+  border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; margin: 0;
+}
+.reg-source legend { padding: 0 4px; }
+.reg-source-body { margin: 4px 0 12px 26px; }
+.reg-filestatus { font-size: .82rem; color: var(--muted); margin: 6px 0 0; }
+.reg-ok { color: var(--green); font-size: .9rem; margin: 0; font-weight: 600; }
+.reg-registered { margin-top: 28px; border-top: 1px solid var(--line); padding-top: 18px; }
+.reg-registered h3 { margin: 0 0 10px; font-size: 1.05rem; }
+.reg-list { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
+.reg-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.reg-item-main { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.reg-item .actions { margin-top: 0; }
+
 /* ---- explore shell (既存 3 ロールデモを内包) ---- */
 .explore-intro { color: var(--muted); margin: 4px 0 12px; }
 .explore-intro strong { color: var(--brand); }
