@@ -40,6 +40,13 @@ BODY
 ```
 > `Closes #<n>` で merge 時に Issue が自動 close される。close したくない場合は `Refs #<n>`。
 
+## マージ（CI 緑を待つ / スタック PR の注意）
+- **マージ前に CI（quality / e2e）が pass になるまで待つ**。`gh pr checks <n>` / `gh pr view <n> --json mergeStateStatus`（CLEAN）。
+- **複数 Issue を依存順にスタックした PR 群**（base = 前段ブランチ）は、`gh pr merge --delete-branch` を**使わない**。
+  親ブランチを消すと子 PR が自動クローズ＆復活不可になる。親を develop にマージ後、`gh pr edit <子> --base develop` で
+  付け替えてからマージし、全部入ってからブランチをまとめて削除する。
+- 詳細は [branch-worktree-policy.md](../../../docs/branch-worktree-policy.md) 「既知の落とし穴」を参照。
+
 ## Issue へコメント（issue-management.md の Progress Update フォーマット）
 ```bash
 gh issue comment <n> --body-file progress.md

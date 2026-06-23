@@ -65,6 +65,10 @@
 - コミット前に上記「検証コマンド」を通す。落ちたまま完了報告しない。
 - `uv.lock` はコミットする（再現可能な環境のため）。
 - コミットメッセージ末尾に `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`。
+- **コミット author email は `5264958+gghatano@users.noreply.github.com`**（実メールだと GitHub の
+  メールプライバシー設定で push が拒否される）。worktree では作業前に
+  `git config user.email "5264958+gghatano@users.noreply.github.com"` を設定する。
+  詳細・スタック PR の落とし穴は [branch-worktree-policy.md](docs/branch-worktree-policy.md) を参照。
 - PR 本文に Issue 番号・変更内容・検証結果・レビュー観点を記載し、作成後 Issue に PR リンクを残す。
 
 ## 実装時の禁止事項

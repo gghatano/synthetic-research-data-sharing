@@ -71,3 +71,46 @@ git worktree list                 # 現在の worktree 一覧
 git worktree remove <path>        # 削除
 git worktree prune                # 参照切れの掃除
 ```
+
+## 既知の落とし穴（push / スタック PR）
+
+過去のリリースで実際にハマった repo 固有の注意点。プロンプトに毎回書かず、ここを参照する。
+
+### 1. コミット author email（push 拒否の回避）
+実メールでコミットすると GitHub のメールプライバシー設定で
+`push declined due to email privacy restrictions` になる。**必ず noreply を使う**。
+```bash
+git config user.email "5264958+gghatano@users.noreply.github.com"
+git config user.name  "gghatano"
+# 既にローカルの実メールでコミット済みなら author を貼り直す:
+git rebase develop --exec 'git commit --amend --no-edit --reset-author'
+```
+
+### 2. スタック PR のマージで `--delete-branch` を使わない
+複数 Issue を依存順にスタック（base = 前段ブランチ）した PR 群を develop へ入れるとき、
+`gh pr merge <親> --delete-branch` で**親ブランチを消すと、それを base にしていた子 PR が
+自動でクローズされ、しかも base ブランチ消失のため reopen できない**（置き換え PR を作り直す羽目になる）。
+
+正しい手順（親を develop に入れてから子の base を develop へ付け替える）:
+```bash
+gh pr merge <親> --merge                 # --delete-branch は付けない
+gh pr edit  <子> --base develop          # 親が develop に入った後で付け替え（差分が Issue 単位で残る）
+# CI 緑を待って:
+gh pr merge <子> --merge
+# 全部 develop に入ってから、不要ブランチをまとめて削除:
+#   git push origin --delete issue/<n>-<slug> ...
+```
+
+### 3. マージ前に CI（quality / e2e）緑をポーリング確認
+`on: [push, pull_request]` の `ci.yml` が走る。緑になる前にマージしない。
+```bash
+# pass になるまで待つ（quality と e2e の 2 job、各 1 分弱）
+gh pr checks <n>                         # pass/pending/fail を確認
+gh pr view  <n> --json mergeStateStatus  # CLEAN になればマージ可
+```
+
+### 4. リリース（develop → main）
+既定ブランチは develop（Issue は develop マージで `Closes #n` により自動 close）。
+リリースは develop→main の PR をマージ → `.github/workflows/deploy.yml` が GitHub Pages へデプロイ。
+デプロイ成功を `gh run list --workflow=deploy.yml --branch main` で確認する。
+公開 URL: https://gghatano.github.io/synthetic-research-data-sharing/
