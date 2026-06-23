@@ -226,6 +226,63 @@ button.ghost {
 .stepper.inline { border: 1px solid var(--line); border-radius: var(--radius); margin-bottom: 8px; }
 .explore-shell .tabs { padding-left: 0; padding-right: 0; }
 .explore-shell > .panel { box-shadow: none; }
+.explore-shell {
+  border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 16px; margin-top: 16px; background: #fbfcfe;
+}
+
+/* ---- catalog list ---- */
+.catalog-view { margin-top: 16px; }
+.catalog-head h2 { margin: 0 0 6px; font-size: 1.3rem; }
+.catalog-intro { color: var(--muted); margin: 0 0 16px; }
+.catalog-intro strong { color: var(--brand); }
+.catalog-toolbar {
+  display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; margin-bottom: 16px;
+}
+.catalog-search { flex: 1 1 320px; max-width: 460px; }
+.catalog-search input {
+  width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px;
+  font-size: .95rem; background: #fcfdff;
+}
+.catalog-count { color: var(--muted); font-size: .85rem; white-space: nowrap; }
+.catalog-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
+.catalog-card { display: flex; flex-direction: column; background: var(--panel); box-shadow: var(--shadow); }
+.catalog-card h3 { margin: 0 0 8px; font-size: 1.05rem; }
+.catalog-card .catalog-desc { flex: 1 1 auto; font-size: .9rem; color: var(--ink); }
+.catalog-card .actions { margin-top: auto; }
+.catalog-meta, .dataset-meta {
+  display: flex; gap: 12px; flex-wrap: wrap; color: var(--muted); font-size: .82rem; margin: 0 0 8px;
+}
+.catalog-domain {
+  background: #eef1f6; padding: 1px 8px; border-radius: 6px; font-weight: 600;
+}
+.tag-list { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0; }
+.tag {
+  font-size: .74rem; color: var(--brand-dark); background: #e8f0fb;
+  border: 1px solid #cfe0f6; padding: 1px 9px; border-radius: 999px;
+}
+
+/* ---- dataset detail page ---- */
+.dataset-view { margin-top: 16px; }
+.dataset-back { margin-bottom: 8px; }
+.dataset-body {
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 24px; box-shadow: var(--shadow);
+}
+.dataset-head h2 { margin: 0 0 8px; font-size: 1.35rem; }
+.dataset-desc { color: var(--ink); margin: 8px 0; }
+.dataset-section { margin-top: 24px; border-top: 1px solid var(--line); padding-top: 18px; }
+.dataset-section > h3 { margin: 0 0 10px; font-size: 1.05rem; }
+.usage-list { margin: 8px 0; padding-left: 20px; }
+.usage-list li { margin: 4px 0; }
+.preview-table { margin: 12px 0; }
+.preview-table h4 { margin: 0 0 6px; font-size: .9rem; color: var(--muted); }
+.table-scroll { overflow-x: auto; }
+.submission-list { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
+.submission-card {
+  display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: #fbfcfe;
+}
+.submission-card .role-pill { background: #eef1f6; border: 1px solid var(--line); color: var(--muted); }
 
 .site-foot { text-align: center; color: var(--muted); font-size: .82rem; padding: 20px; }
 .site-foot a { color: var(--brand); }

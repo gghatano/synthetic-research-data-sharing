@@ -29,15 +29,35 @@ def login(page: Page, name: str, role: str) -> None:
     page.wait_for_selector("[data-testid='top-view']", state="visible")
 
 
-def open_app(page: Page, base_url: str) -> None:
-    """アプリを開き、owner でログイン→データ探索(既存 3 ロールデモ)まで遷移して待つ。
-
-    既存の 3 ロールデモは PF-1 でログイン後の「データ探索」ビューへ移設された。
-    既存 E2E はこのワークベンチを前提とするため、ここでログイン+遷移をまとめて行う。
-    """
+def open_catalog(page: Page, base_url: str) -> None:
+    """アプリを開き、owner でログイン→データカタログ一覧まで遷移して待つ。"""
     goto_app(page, base_url)
     login(page, "保田 オーナー", "owner")
     page.get_by_test_id("nav-explore").click()
+    page.wait_for_selector("[data-testid='explore-view']", state="visible")
+    # catalog.json の fetch でカードが描画されるまで待つ。
+    page.wait_for_selector("[data-testid='catalog-card']", state="visible")
+
+
+def open_dataset(page: Page, base_url: str, dataset_id: str = "prostate-psa") -> None:
+    """カタログ一覧から指定データセットの個別ページを開いて待つ。"""
+    open_catalog(page, base_url)
+    page.locator(
+        f"[data-testid='catalog-card'][data-dataset-id='{dataset_id}'] [data-testid='catalog-open']"
+    ).click()
+    page.wait_for_selector("[data-testid='dataset-view']", state="visible")
+    page.wait_for_selector("[data-testid='dataset-title']", state="visible")
+
+
+def open_app(page: Page, base_url: str) -> None:
+    """アプリを開き、owner ログイン→カタログ→個別ページ→分析ワークベンチまで遷移して待つ。
+
+    既存の 3 ロールデモは PF-3 でカタログ個別ページ配下の「分析ワークベンチ」に内包された。
+    既存 E2E はこのワークベンチを前提とするため、ここで一連の遷移をまとめて行う
+    (マークアップ・data 属性・id は不変なので、これ以降のセレクタは従来どおり)。
+    """
+    open_dataset(page, base_url, "prostate-psa")
+    page.get_by_test_id("open-workbench").click()
     # 公開パネルが Alpine の x-show で可視化されるまで待つ。
     page.wait_for_selector(
         "section.panel:has(h2:has-text('合成データを公開する'))", state="visible"
@@ -45,9 +65,9 @@ def open_app(page: Page, base_url: str) -> None:
 
 
 def alpine_state(page: Page) -> dict:
-    """探索ビューの x-data(workflow) の状態を取り出す。最終 DOM 反映の補助確認用。"""
+    """ワークベンチの x-data(workflow) の状態を取り出す。最終 DOM 反映の補助確認用。"""
     return page.evaluate(
-        "() => { const r = document.querySelector('[data-testid=explore-view]'); "
+        "() => { const r = document.querySelector('[data-testid=workbench]'); "
         "const d = Alpine.$data(r); "
         "return { role: d.role, phase: d.phase, selected: d.selected, "
         "submitted: d.submitted, loaded: d.loaded }; }"

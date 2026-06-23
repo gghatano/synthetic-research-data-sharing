@@ -23,7 +23,7 @@ def test_login_owner_to_top(page: Page, base_url: str) -> None:
 
     expect(page.get_by_test_id("top-view")).to_be_visible()
     expect(page.get_by_test_id("login-view")).to_be_hidden()
-    # owner はデータ登録/データ探索の両方の導線が見える。
+    # owner はデータ登録/データカタログの両方の導線が見える。
     expect(page.get_by_test_id("card-register")).to_be_visible()
     expect(page.get_by_test_id("card-explore")).to_be_visible()
     expect(page.get_by_test_id("nav-register")).to_be_visible()
@@ -75,16 +75,36 @@ def test_logout_returns_to_login(page: Page, base_url: str) -> None:
 
 
 def test_unauthenticated_guard(page: Page, base_url: str) -> None:
-    """未ログインで保護ビューへ遷移しようとしてもログイン画面に留まる(擬似ガード)。"""
+    """未ログインで保護ビュー(top / register)へ遷移しようとしてもログイン画面に留まる。
+
+    カタログ(explore / dataset)は「誰でも閲覧可」の公開ビューのためガード対象外
+    (別テスト test_catalog_public_without_login で公開閲覧を確認する)。
+    """
     goto_app(page, base_url)
     # ストア API 経由で保護ビューへ遷移を試みる(本来 UI 導線は未ログインで非表示)。
-    page.evaluate("() => Alpine.store('session').go('explore')")
+    page.evaluate("() => Alpine.store('session').go('top')")
     expect(page.get_by_test_id("login-view")).to_be_visible()
-    expect(page.get_by_test_id("explore-view")).to_be_hidden()
+    expect(page.get_by_test_id("top-view")).to_be_hidden()
 
     page.evaluate("() => Alpine.store('session').go('register')")
     expect(page.get_by_test_id("login-view")).to_be_visible()
     expect(page.get_by_test_id("register-view")).to_be_hidden()
+
+
+def test_catalog_public_without_login(page: Page, base_url: str) -> None:
+    """未ログインでもカタログ一覧は閲覧でき、ログインせず詳細まで到達できる(誰でも閲覧)。"""
+    goto_app(page, base_url)
+    # ログイン画面から「ログインせずカタログを見る」で一覧へ。
+    page.get_by_test_id("login-to-catalog").click()
+    expect(page.get_by_test_id("explore-view")).to_be_visible()
+    expect(page.get_by_test_id("login-view")).to_be_hidden()
+    # 未ログインなのでログアウト導線は出ない。
+    expect(page.get_by_test_id("logout")).to_be_hidden()
+    # カードが描画され、詳細へ遷移できる。
+    page.wait_for_selector("[data-testid='catalog-card']", state="visible")
+    page.locator("[data-testid='catalog-open']").first.click()
+    expect(page.get_by_test_id("dataset-view")).to_be_visible()
+    expect(page.get_by_test_id("dataset-title")).to_be_visible()
 
 
 def test_analyst_register_guard(page: Page, base_url: str) -> None:
@@ -96,10 +116,12 @@ def test_analyst_register_guard(page: Page, base_url: str) -> None:
     expect(page.get_by_test_id("register-view")).to_be_hidden()
 
 
-def test_nav_to_explore_shows_demo(page: Page, base_url: str) -> None:
-    """データ探索ビューで既存 3 ロールデモ(公開パネル)に到達できる。"""
+def test_nav_to_explore_shows_catalog(page: Page, base_url: str) -> None:
+    """データカタログビューで catalog.json 由来のカードが表示される。"""
     goto_app(page, base_url)
     login(page, "保田 オーナー", "owner")
     page.get_by_test_id("nav-explore").click()
     expect(page.get_by_test_id("explore-view")).to_be_visible()
-    expect(page.locator("section.panel:has(h2:has-text('合成データを公開する'))")).to_be_visible()
+    page.wait_for_selector("[data-testid='catalog-card']", state="visible")
+    # 少なくとも 1 件のデータセットカードが表示される。
+    expect(page.get_by_test_id("catalog-card").first).to_be_visible()
