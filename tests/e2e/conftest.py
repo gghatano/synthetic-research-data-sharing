@@ -20,8 +20,8 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SITE_DIR = REPO_ROOT / "site"
 
-# CDN 到達性チェックに使う代表 URL(Chart.js)。
-_CDN_PROBE = "https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"
+# CDN 到達性チェックに使う代表 URL(ライブシェルが実際に読み込む Alpine.js)。
+_CDN_PROBE = "https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"
 
 
 @pytest.fixture(scope="session")

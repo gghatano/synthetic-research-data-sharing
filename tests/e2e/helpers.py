@@ -14,11 +14,12 @@ ANALYST = ("分析 太郎", "analyst-demo")
 
 
 def goto_app(page: Page, base_url: str) -> None:
-    """アプリを開き、CDN ライブラリ(Chart/htmx/Alpine)の読込完了を待つ(ログイン画面の状態)。"""
+    """アプリを開き、CDN ライブラリ(htmx/Alpine)の読込完了を待つ(ログイン画面の状態)。"""
     page.set_default_timeout(DEFAULT_TIMEOUT_MS)
     page.goto(base_url + "/")
-    # 3 つの CDN ライブラリが読み込まれるまで待つ(htmx は defer, Alpine も defer)。
-    page.wait_for_function("() => typeof Chart !== 'undefined' && !!window.htmx && !!window.Alpine")
+    # CDN ライブラリ(htmx は defer, Alpine も defer)が読み込まれるまで待つ。
+    # Chart.js はライブシェルでは読み込まない(#70)。フラグメント内でのみ使用。
+    page.wait_for_function("() => !!window.htmx && !!window.Alpine")
     # 擬似ログイン画面が x-cloak 解除されて可視化されるまで待つ。
     page.wait_for_selector("[data-testid='login-view']", state="visible")
 
