@@ -757,6 +757,29 @@
                   提出にはログインが必要です。
                   <a href="#" @click.prevent="$store.session.go('login')">ログインへ</a></span>
               </div>
+
+              <!--
+                デモ用ワンクリック提出(#55 の登録ボタンと同思想・便宜機能)。
+                ファイルを用意せず、内蔵のサンプル(プログラム＋結果テキスト＋所見)を
+                そのまま submissions.add() へ流し、提出→審査フローを素早く試せる。
+                提出は要ログインなので手動提出と同じ認証ガード(未ログインで無効化)。
+                サンプルは複数あり、クリックごとに次を巡回提出する。
+                プログラムは実行されず、表示・保管のみ(手動提出と同じ)。
+              -->
+              <div class="reg-demo submit-demo" data-testid="submit-demo-box">
+                <div class="reg-demo-text">
+                  <strong>デモを素早く試す</strong>
+                  <p class="frag-note">ファイル準備なしで、内蔵の架空サンプル
+                    (分析プログラム＋結果＋所見)をそのまま提出します(便宜機能)。
+                    クリックごとに次のサンプルを提出します。提出物は実行されず表示のみ。</p>
+                </div>
+                <button class="ghost" type="button" data-testid="submit-demo"
+                        @click="submitDemo()"
+                        :disabled="!$store.session.isAuthed()"
+                        :title="!$store.session.isAuthed()
+                          ? 'ログインすると提出できます' : ''">
+                  デモ用のサンプルを提出</button>
+              </div>
             </div>
             </template>
           </section>
@@ -1387,12 +1410,118 @@
     // 分析プログラム＋結果の提出フォーム(#41, N2)。datasetPage 配下にネストされ、
     // 親スコープの dataset を参照できる。アップロードしたプログラムは実行せず、
     // FileReader でテキスト/画像(dataURL)を読み込み、共有ストア submissions へ保存する。
+    // デモ用ワンクリック提出(#52)で使う内蔵サンプル提出物。
+    // Submission スキーマと同形(program{name,text}/results[]/report)。
+    // analyst/status/id/submittedAt はクリック時に submissions.add() が補完するため持たない。
+    // 結果は type:"text" のみ(大きな dataURL を避ける)。プログラムは実行されず表示・保管のみ。
+    // #53(プリセット seed)が同じ定義を再利用できるよう、独立した名前付き定数として置く。
+    const DEMO_SUBMISSIONS = [
+      {
+        program: {
+          name: "clustering.py",
+          text:
+            "import pandas as pd\n" +
+            "from sklearn.cluster import KMeans\n" +
+            "from sklearn.preprocessing import StandardScaler\n" +
+            "\n" +
+            "# 合成データを読み込み、患者を 3 クラスタに分割する\n" +
+            "df = pd.read_csv('synthetic_patients.csv')\n" +
+            "X = df[['age', 'psa_baseline', 'psa_slope']]\n" +
+            "Xs = StandardScaler().fit_transform(X)\n" +
+            "km = KMeans(n_clusters=3, random_state=42, n_init=10)\n" +
+            "df['cluster'] = km.fit_predict(Xs)\n" +
+            "\n" +
+            "summary = df.groupby('cluster')['responder'].mean()\n" +
+            "print(summary)\n",
+        },
+        results: [
+          {
+            type: "text",
+            name: "クラスタ別 responder 比率",
+            content:
+              "cluster  n    responder_rate\n" +
+              "0        58   0.41\n" +
+              "1        72   0.63\n" +
+              "2        45   0.78\n" +
+              "\n" +
+              "クラスタ 2 で responder 比率が最も高い(0.78)。",
+          },
+        ],
+        report:
+          "PSA ベースライン/傾きで 3 クラスタに分割。クラスタ 2 で responder 比率が高い傾向。" +
+          "生データでの再現性を確認したい。",
+      },
+      {
+        program: {
+          name: "dose_response.py",
+          text:
+            "import numpy as np\n" +
+            "import pandas as pd\n" +
+            "import statsmodels.formula.api as smf\n" +
+            "\n" +
+            "# 用量と反応の回帰(合成データ)。生データへの適用前の探索。\n" +
+            "df = pd.read_csv('synthetic_dose.csv')\n" +
+            "df['log_dose'] = np.log1p(df['dose_mg'])\n" +
+            "model = smf.logit('responder ~ log_dose + age', data=df).fit()\n" +
+            "print(model.summary())\n",
+        },
+        results: [
+          {
+            type: "text",
+            name: "用量反応 回帰サマリ",
+            content:
+              "term       coef    std_err   p\n" +
+              "Intercept  -2.10   0.44      <0.001\n" +
+              "log_dose    0.58   0.12      <0.001\n" +
+              "age        -0.01   0.01       0.21\n" +
+              "\n" +
+              "log_dose に有意な正の関連(p<0.001)。",
+          },
+        ],
+        report:
+          "用量(log)と反応に有意な正の関連。年齢の寄与は小さい。" +
+          "TRE 内で生データに適用して効果量を再確認したい。",
+      },
+      {
+        program: {
+          name: "survival_km.py",
+          text:
+            "import pandas as pd\n" +
+            "from lifelines import KaplanMeierFitter\n" +
+            "\n" +
+            "# Kaplan-Meier 生存曲線をリスク群別に推定する(合成データ)。\n" +
+            "df = pd.read_csv('synthetic_survival.csv')\n" +
+            "kmf = KaplanMeierFitter()\n" +
+            "for grp, sub in df.groupby('risk_group'):\n" +
+            "    kmf.fit(sub['time'], sub['event'], label=grp)\n" +
+            "    print(grp, kmf.median_survival_time_)\n",
+        },
+        results: [
+          {
+            type: "text",
+            name: "群別 生存中央値(日)",
+            content:
+              "risk_group  median_survival_days\n" +
+              "low         420\n" +
+              "moderate    310\n" +
+              "high        185\n" +
+              "\n" +
+              "high 群で生存中央値が明らかに短い(185 日)。",
+          },
+        ],
+        report:
+          "リスク群間で生存中央値に差(low 420 / high 185 日)。" +
+          "ログランク検定を生データで実施したい。",
+      },
+    ];
+
     function submitForm() {
       const MAX_PROGRAM_BYTES = 512 * 1024; // プログラムテキスト上限 512KB
       const MAX_IMAGE_BYTES = 2 * 1024 * 1024; // 画像 dataURL の肥大化防止 2MB
       // 許可する画像 MIME(完全一致)。image/svg+xml はスクリプトを含みうるため除外する。
       const ALLOWED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"];
       return {
+        demoSeq: 0, // デモ用サンプル提出の巡回インデックス(#52)
         programName: "",
         programText: "",
         programBytes: 0,
@@ -1514,6 +1643,31 @@
           this.resultImage = null;
           this.resultText = "";
           this.report = "";
+        },
+        // デモ用ワンクリック提出(#52)。内蔵サンプル(DEMO_SUBMISSIONS)を巡回し、
+        // 手動提出と同じ submissions.add() 経路で 1 件保存する。要ログイン。
+        // analyst はクリック時のログインユーザー名。status は store が "submitted" を補完。
+        // プログラムは実行されず、表示・保管のみ(手動提出と同じ)。
+        submitDemo() {
+          this.error = "";
+          this.success = "";
+          if (!this.$store.session.isAuthed()) {
+            this.error = "提出にはログインが必要です。";
+            return;
+          }
+          const def = DEMO_SUBMISSIONS[this.demoSeq % DEMO_SUBMISSIONS.length];
+          this.demoSeq += 1;
+          const datasetId = this.$store.session.currentDatasetId;
+          // サンプル定義は共有しているため、結果配列は浅いコピーで渡す(参照共有を避ける)。
+          const saved = this.$store.submissions.add(datasetId, {
+            program: { name: def.program.name, text: def.program.text },
+            results: def.results.map((r) => ({ ...r })),
+            report: def.report,
+            analyst: this.$store.session.user?.name || "analyst",
+          });
+          this.success =
+            "デモ用サンプルを提出しました(" + saved.id + ": " +
+            def.program.name + ")。下の「紐づく提出物」に追加されました。";
         },
       };
     }

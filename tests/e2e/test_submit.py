@@ -148,6 +148,53 @@ def test_uploaded_program_is_not_executed_xss_safe(page: Page, base_url: str) ->
     assert page.evaluate("() => window.__pwned") is None
 
 
+def test_submit_demo_sample(page: Page, base_url: str) -> None:
+    """デモ用サンプル提出ボタンで、ファイル準備なしに提出物が一覧に追加される(#52)。"""
+    open_dataset_as(page, base_url, name="分析 太郎", role="analyst")
+
+    # 提出前は提出物ゼロ。
+    assert page.get_by_test_id("submission-card").count() == 0
+
+    page.get_by_test_id("submit-demo").click()
+    expect(page.get_by_test_id("submit-success")).to_be_visible()
+
+    card = page.get_by_test_id("submission-card").first
+    expect(card).to_be_visible()
+    # 内蔵サンプル(1 件目)が手動提出と同形で表示される。
+    expect(card.get_by_test_id("submission-program")).to_have_text("clustering.py")
+    expect(card.get_by_test_id("submission-status")).to_have_text("submitted")
+    expect(card.get_by_test_id("submission-results-count")).to_contain_text("結果 1 件")
+
+
+def test_submit_demo_cycles_samples(page: Page, base_url: str) -> None:
+    """連続クリックで内蔵サンプルを巡回提出する(#52)。"""
+    open_dataset_as(page, base_url, name="分析 太郎", role="analyst")
+
+    page.get_by_test_id("submit-demo").click()
+    page.get_by_test_id("submit-demo").click()
+
+    cards = page.get_by_test_id("submission-card")
+    expect(cards).to_have_count(2)
+    # 巡回: 2 クリックで別々のサンプル名が並ぶ(最新が先頭表示でなくても両方存在する)。
+    names = cards.locator("[data-testid='submission-program']").all_inner_texts()
+    assert "clustering.py" in names
+    assert "dose_response.py" in names
+
+
+def test_submit_demo_requires_login(page: Page, base_url: str) -> None:
+    """未ログインではデモ提出ボタンも無効(手動提出と同じ認証ガード)(#52)。"""
+    goto_app(page, base_url)
+    page.get_by_test_id("login-to-catalog").click()
+    page.wait_for_selector("[data-testid='explore-view']", state="visible")
+    page.wait_for_selector("[data-testid='catalog-card']", state="visible")
+    page.locator(
+        "[data-testid='catalog-card'][data-dataset-id='prostate-psa'] [data-testid='catalog-open']"
+    ).click()
+    page.wait_for_selector("[data-testid='dataset-view']", state="visible")
+
+    expect(page.get_by_test_id("submit-demo")).to_be_disabled()
+
+
 def test_user_dataset_has_no_submit_form(page: Page, base_url: str) -> None:
     """ユーザー登録分(user-<n>)は合成データ未生成のため提出フォームを出さない。"""
     open_register(page, base_url)
