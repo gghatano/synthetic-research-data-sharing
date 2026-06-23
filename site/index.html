@@ -722,14 +722,24 @@
           </section>
 
           <!--
-            紐づく提出物一覧(#41 が書き込む)。各カードは提出物の概要(プログラム名・結果件数・
-            レポート・status)を表示する。提出物の詳細閲覧と審査(プログラム＋結果の閲覧 →
-            承認)は #42(審査ビュー)で追加する。一覧の表示元は親 datasetPage の submissions()。
+            紐づく提出物一覧(#41 が書き込む)＋審査(#42, N3)。各カードは提出物の概要
+            (プログラム名・結果件数・レポート・status)を表示する。owner だけに「審査する」導線を
+            出し(擬似ガード)、選んだ提出物の【プログラム(コード)＋結果(画像/テキスト)＋レポート】を
+            閲覧 → 承認で status を approved に遷移させる。生データ並置(合成≈生)はここでは行わない
+            (核メッセージのデモはカタログ外の専用面 = §7.10, #43)。
           -->
-          <section class="dataset-section" data-testid="dataset-submissions">
+          <section class="dataset-section" data-testid="dataset-submissions"
+                   x-data="reviewPanel()">
             <h3>紐づく提出物</h3>
             <p class="frag-note">このデータセットの<strong>合成データ</strong>に対して提出された
-              プログラム＋結果の一覧です。上のフォームから提出するとここに追加されます。</p>
+              プログラム＋結果の一覧です。上のフォームから提出するとここに追加されます。
+              <strong x-show="canReview()" x-cloak>オーナーは各提出物を選び、プログラムと結果を
+              確認して承認できます。</strong></p>
+
+            <!-- 非 owner には審査導線が出ない旨の注記(擬似ガード)。 -->
+            <p class="frag-note review-guard-note" data-testid="review-guard"
+               x-show="$store.session.isAuthed() && !canReview()" x-cloak>
+              提出物の審査は<strong>データオーナー</strong>のみ行えます。</p>
 
             <div class="submission-list"
                  data-testid="submission-list"
@@ -757,9 +767,100 @@
                   </p>
                   <p class="submission-report" data-testid="submission-report"
                      x-show="s.report" x-cloak x-text="s.report"></p>
+
+                  <!-- 審査導線(owner 限定) -->
+                  <div class="actions" x-show="canReview()" x-cloak>
+                    <button class="primary" data-testid="review-open"
+                            @click="openReview(s)"
+                            x-show="reviewingId !== s.id"
+                            x-text="s.status === 'approved'
+                              ? '審査結果を見る' : '審査する →'"></button>
+                    <button class="ghost" data-testid="review-close"
+                            @click="closeReview()"
+                            x-show="reviewingId === s.id">審査を閉じる</button>
+                  </div>
                 </div>
               </template>
             </div>
+
+            <!--
+              提出物審査ビュー(owner 限定, #42)。一覧で選んだ提出物の【プログラム(コード)＋
+              結果(画像/テキスト)＋レポート】を表示し、承認で status を approved に遷移させる。
+              アップロードされたプログラムは実行せず x-text 表示、画像は提出時の dataURL を
+              そのまま表示する(生データ並置はしない)。
+            -->
+            <section class="review-panel" data-testid="review-view"
+                     x-show="reviewing" x-cloak>
+              <template x-if="reviewing">
+              <div>
+                <h3>提出物を審査する：
+                  <span data-testid="review-program-name"
+                        x-text="reviewing.program?.name || 'program'"></span></h3>
+                <p>分析者がアップロードした<strong>プログラムと結果</strong>を確認します。
+                  プログラムは実行されません(本番では TRE 内でオーナーがレビュー後に生データへ
+                  適用)。問題なければ承認してください。</p>
+
+                <!-- 提出レポート(所見/メモ) -->
+                <div class="review-report" data-testid="review-report-shown"
+                     x-show="reviewing.report" x-cloak>
+                  <h4>提出レポート</h4>
+                  <p class="submission-report" x-text="reviewing.report"></p>
+                </div>
+                <p class="submission-meta">
+                  <span class="catalog-owner">👤 <span x-text="reviewing.analyst"></span></span>
+                  <span class="submission-when"
+                        x-text="new Date(reviewing.submittedAt).toLocaleString('ja-JP')"></span>
+                </p>
+
+                <!-- プログラム(コード)。x-text で文字列表示(実行しない)。 -->
+                <div class="review-program" data-testid="review-program">
+                  <h4>分析プログラム
+                    (<span x-text="reviewing.program?.name || 'program'"></span>)</h4>
+                  <pre class="frag-code-block"><code data-testid="review-program-code"
+                    x-text="reviewing.program?.text"></code></pre>
+                </div>
+
+                <!-- 結果(画像/テキスト)。画像は提出時 dataURL、テキストは x-text。 -->
+                <div class="review-results" data-testid="review-results">
+                  <h4>提出された結果</h4>
+                  <template x-for="(r, ri) in (reviewing.results || [])" :key="ri">
+                    <div class="review-result" data-testid="review-result"
+                         :data-result-type="r.type">
+                      <template x-if="r.type === 'image'">
+                        <figure class="review-result-figure">
+                          <img :src="r.content" :alt="r.name" class="result-thumb" />
+                          <figcaption class="reg-filestatus" x-text="r.name"></figcaption>
+                        </figure>
+                      </template>
+                      <template x-if="r.type === 'text'">
+                        <div>
+                          <h5 x-text="r.name"></h5>
+                          <pre class="result-text" x-text="r.content"></pre>
+                        </div>
+                      </template>
+                    </div>
+                  </template>
+                </div>
+
+                <div class="actions">
+                  <button class="primary" data-testid="review-approve"
+                          @click="approve()"
+                          :disabled="reviewing.status === 'approved'"
+                          x-text="reviewing.status === 'approved'
+                            ? '承認済み ✓' : '承認する'"></button>
+                  <button class="ghost" data-testid="review-view-close"
+                          @click="closeReview()">閉じる</button>
+                </div>
+
+                <p class="review-callout" data-testid="review-callout"
+                   x-show="reviewing.status === 'approved'" x-cloak>
+                  ✅ この提出物を<strong>承認しました</strong>。本番では TRE 内で同じプログラムを
+                  生データへ適用し、結果(本物のレポート)を作成します。「合成データで開発した同一
+                  コードが生データでも近い結果になる」原理のデモは、カタログ外の専用デモ面で
+                  確認できます(#43 で追加)。</p>
+              </div>
+              </template>
+            </section>
           </section>
         </div>
       </template>
@@ -1051,6 +1152,51 @@
             .map((def) => ({ ...def, rows: p[def.name] }));
         },
         // 紐づく提出物(共有ストアから dataset_id で引く。#23 では空状態の枠)。
+        submissions() {
+          const id = this.dataset && this.dataset.dataset_id;
+          return id ? this.$store.submissions.forDataset(id) : [];
+        },
+      };
+    }
+
+    // 提出物審査パネル(#42, N3, owner 限定)。datasetPage 配下にネストされ、親スコープの
+    // dataset を参照できる(Alpine はスコープを継承する)。一覧の各カードから提出物を選び、
+    // 【プログラム(コード)＋結果(画像/テキスト)＋レポート】を閲覧 → 承認で共有ストアの
+    // status を approved に遷移させる(submission-status へ即時反映)。生データ並置はしない。
+    function reviewPanel() {
+      return {
+        reviewingId: null, // 審査中の提出物 id(null=非表示)
+        // owner のみ審査可。
+        //   仮定: catalog の owner 名と突き合わせる厳密一致は擬似のため簡略化し、
+        //   「owner ロールならこのデータセットの提出物を審査できる」とする(Issue 許容)。
+        //   本番では TRE/サーバーがデータセット所有権で認可する。
+        canReview() {
+          return this.$store.session.user?.role === "owner";
+        },
+        // 審査中の提出物オブジェクト(共有ストアの実体。status 遷移が反映される)。
+        get reviewing() {
+          if (!this.reviewingId || !this.dataset) return null;
+          return this.$store.submissions.find(this.dataset.dataset_id, this.reviewingId);
+        },
+        // 提出物を選んで審査ビューを開く(owner 限定)。
+        openReview(s) {
+          if (!this.canReview()) return;
+          this.reviewingId = s.id;
+        },
+        closeReview() {
+          this.reviewingId = null;
+        },
+        // 承認: 共有ストアの status を submitted -> approved に遷移させる
+        // (一覧の submission-status / data-status に即時反映)。生データ適用はしない。
+        // canReview() 通過済みのため reviewer(= owner 名)は常に存在する。
+        approve() {
+          const s = this.reviewing;
+          if (!s || !this.canReview()) return;
+          this.$store.submissions.approve(
+            this.dataset.dataset_id, s.id, this.$store.session.user?.name);
+        },
+        // 一覧描画用(共有ストアから dataset_id で引く)。親 datasetPage.submissions() と
+        // 意図的に同実装(本セクションは x-data=reviewPanel で親メソッドを覆うため再掲)。
         submissions() {
           const id = this.dataset && this.dataset.dataset_id;
           return id ? this.$store.submissions.forDataset(id) : [];
