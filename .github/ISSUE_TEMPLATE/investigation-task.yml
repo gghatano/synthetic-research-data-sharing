@@ -1,0 +1,52 @@
+name: Investigation Task
+description: 調査・検証タスク。成果物は「結論 + 根拠 + 次アクション(Issue候補)」。実装はしない。
+title: "[Investigation] "
+labels: ["type:investigation", "status:ready"]
+body:
+  - type: textarea
+    id: question
+    attributes:
+      label: 調査する問い
+      description: 答えるべき具体的な問い（YES/NO や選択肢で締めくくれる形が望ましい）
+    validations:
+      required: true
+
+  - type: textarea
+    id: background
+    attributes:
+      label: 背景
+      description: なぜ調べるか・前提
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: 調査スコープ / 非スコープ
+      value: |
+        - スコープ: 読む対象・確認する観点
+        - 非スコープ: 実装はしない / 設計確定はしない
+    validations:
+      required: true
+
+  - type: textarea
+    id: deliverable
+    attributes:
+      label: 成果物（完了条件）
+      value: |
+        - [ ] 問いへの結論（根拠つき。file:line で裏付け）
+        - [ ] 取り得る選択肢と推奨（トレードオフ）
+        - [ ] 次アクション（実装 Issue 候補）
+    validations:
+      required: true
+
+  - type: textarea
+    id: claude_instruction
+    attributes:
+      label: Claude Code への作業指示
+      value: |
+        読み取り中心で調査し、コードは変更しないでください。
+        結論は推測と事実を区別し、根拠（file:line / 仕様の節）で裏付けてください。
+        実装が必要なら別の Implementation Task Issue 候補として記録してください。
+    validations:
+      required: true

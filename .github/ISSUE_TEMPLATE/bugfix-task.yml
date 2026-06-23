@@ -1,0 +1,89 @@
+name: Bugfix Task
+description: バグ修正タスク。再現 → 原因 → 最小修正 → 回帰テスト。
+title: "[Bug] "
+labels: ["type:bug", "status:ready"]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: 不具合の概要
+      description: 何が、どの条件で、どう壊れるか
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: 再現手順
+      description: 最小の再現手順。可能なら失敗するコマンド/入力。
+      placeholder: |
+        1.
+        2.
+        期待: / 実際:
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected_actual
+    attributes:
+      label: 期待結果 / 実際の結果
+      placeholder: |
+        - 期待:
+        - 実際:
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: 修正スコープ / 非スコープ
+      description: この Issue で直すこと・直さないこと
+      value: |
+        - スコープ:
+        - 非スコープ:
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 完了条件
+      value: |
+        - [ ] 不具合が再現しなくなった（再現手順で確認）
+        - [ ] 原因を説明できる（症状でなく原因）
+        - [ ] 回帰テストを追加した
+        - [ ] `uv run pytest -q` / `ruff` / `mypy generator` が緑
+        - [ ] 生成物に意図しない差分がない
+    validations:
+      required: true
+
+  - type: textarea
+    id: verification
+    attributes:
+      label: 検証方法
+      value: |
+        ```bash
+        uv run pytest -q
+        uv run ruff check . && uv run mypy generator
+        ```
+    validations:
+      required: true
+
+  - type: textarea
+    id: risks
+    attributes:
+      label: 既知のリスク・注意点
+      placeholder: |
+        - 再現性 / 純関数性 / 生成物の手編集禁止
+    validations:
+      required: false
+
+  - type: textarea
+    id: claude_instruction
+    attributes:
+      label: Claude Code への作業指示
+      value: |
+        まず再現させ、原因を特定してから**最小の修正**を行ってください（test-fix-loop SKILL）。
+        テストを通すために仕様を曲げないでください。スコープ外の発見は別 Issue 候補として記録してください。
+    validations:
+      required: true

@@ -41,13 +41,31 @@
 | 型チェック | `uv run mypy generator` |
 | 再現性スモーク | `make build` が site/data/*.json と site/fragments/**/*.html を生成 |
 
+## Issue 駆動開発（最重要の運用ルール）
+
+実装作業は原則 **GitHub Issue 単位**で行う。Issue 本文を作業指示書として扱う。
+詳細: [docs/issue-management.md](docs/issue-management.md) /
+[docs/branch-worktree-policy.md](docs/branch-worktree-policy.md) /
+[docs/task-granularity-guide.md](docs/task-granularity-guide.md)。
+
+- **Issue 未作成の実装に着手しない**（足場整備など明示的な例外を除く）。
+- Issue ごとに専用 branch（`issue/<n>-<slug>`）と git worktree
+  （`../worktrees/<repo>-issue-<n>`）を作る。1 worktree = 1 Issue = 1 branch。
+- 作業開始時に `gh issue view <n> --comments` で**本文とコメントを必ず読む**。
+- Issue のスコープを超える変更をしない。**非スコープ**に書かれた内容を実装しない。
+- スコープ外の発見事項は実装せず、Issue コメントまたは別 Issue 候補として記録する。
+- 仕様の曖昧点は、置いた仮定を Issue に明記する。
+- 完了時は **Issue と PR の双方**に検証結果・変更概要・残課題を残し、相互リンクする。
+- gh 実行前に `git remote -v` と `gh auth status` の host 一致を確認する（不一致なら docs の代替手順）。
+
 ## ブランチ・コミット・PR 方針
 
-- 既定ブランチで直接作業しない。`feature/<topic>` を切る。
-- 1 PR = 1 つの完結したタスク（implementation-plan の 1 項目）。差分は小さく。
+- 既定ブランチで直接作業しない。Issue があれば `issue/<n>-<slug>`、足場整備等は `feature/<topic>`。
+- 1 PR = 1 Issue（= 1 完結タスク）。差分は小さく。
 - コミット前に上記「検証コマンド」を通す。落ちたまま完了報告しない。
 - `uv.lock` はコミットする（再現可能な環境のため）。
 - コミットメッセージ末尾に `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`。
+- PR 本文に Issue 番号・変更内容・検証結果・レビュー観点を記載し、作成後 Issue に PR リンクを残す。
 
 ## 実装時の禁止事項
 
@@ -67,8 +85,14 @@
 
 ## 運用資産
 
-- 手順（SKILL）: `.claude/skills/`（spec-implementation, code-review, test-fix-loop, refactor-safely, pr-prep）
+- 手順（SKILL）: `.claude/skills/`
+  - 実装系: spec-implementation, code-review, test-fix-loop, refactor-safely, pr-prep
+  - Issue 駆動: issue-driven-development, issue-triage, worktree-task-runner, pr-from-issue
 - サブエージェント: `.claude/agents/`（reviewer 系は読み取り中心、実装系のみ編集可）
-- 計画: [docs/implementation-plan.md](docs/implementation-plan.md)
-- レビュー観点: [docs/review-checklist.md](docs/review-checklist.md)
-- 完了条件: [docs/acceptance-criteria.md](docs/acceptance-criteria.md)
+  - 計画: spec-analyst, issue-planner, implementation-planner
+  - 実行: issue-runner（主担当）, implementation-agent, backend-implementer, frontend-implementer, test-engineer
+  - レビュー/記録: code-reviewer, security-reviewer, pr-writer
+- Issue 運用: [issue-management.md](docs/issue-management.md) / [branch-worktree-policy.md](docs/branch-worktree-policy.md) / [task-granularity-guide.md](docs/task-granularity-guide.md)
+- Issue テンプレート: `.github/ISSUE_TEMPLATE/`（implementation / bugfix / refactor / investigation）
+- 計画（Issue 候補一覧）: [docs/implementation-plan.md](docs/implementation-plan.md)
+- レビュー観点: [docs/review-checklist.md](docs/review-checklist.md) / 完了条件: [docs/acceptance-criteria.md](docs/acceptance-criteria.md)
