@@ -10,6 +10,7 @@
 Chart.js の設定は Python 側で組み立てて JSON として埋め込み、フラグメント内の
 小さな初期化スクリプトが描画する(テンプレートを薄く保つ)。
 """
+
 from __future__ import annotations
 
 import json
@@ -45,20 +46,27 @@ def _clustering_chart(res: dict) -> dict:
     grid = res["grid_months"]
     datasets = []
     for label, series in res["trajectories"].items():
-        datasets.append(dict(
-            label=f"{label} (n={res['cluster_sizes'].get(label, 0)})",
-            data=series,
-            borderColor=PALETTE[label],
-            backgroundColor=PALETTE[label],
-            spanGaps=True, tension=0.3, fill=False,
-        ))
+        datasets.append(
+            dict(
+                label=f"{label} (n={res['cluster_sizes'].get(label, 0)})",
+                data=series,
+                borderColor=PALETTE[label],
+                backgroundColor=PALETTE[label],
+                spanGaps=True,
+                tension=0.3,
+                fill=False,
+            )
+        )
     return dict(
         type="line",
         data=dict(labels=grid, datasets=datasets),
         options=dict(
-            responsive=True, maintainAspectRatio=False,
-            plugins=dict(legend=dict(position="bottom"),
-                         title=dict(display=True, text="クラスタ別 平均PSA軌跡")),
+            responsive=True,
+            maintainAspectRatio=False,
+            plugins=dict(
+                legend=dict(position="bottom"),
+                title=dict(display=True, text="クラスタ別 平均PSA軌跡"),
+            ),
             scales=dict(
                 x=dict(title=dict(display=True, text="治療開始からの月数")),
                 y=dict(title=dict(display=True, text="PSA (ng/mL)")),
@@ -72,17 +80,26 @@ def _association_chart(res: dict) -> dict:
     line = [dict(x=p["dose"], y=p["reduction"]) for p in res["regression"]["line"]]
     return dict(
         type="scatter",
-        data=dict(datasets=[
-            dict(label="患者", data=pts, backgroundColor=PALETTE["scatter"],
-                 pointRadius=3),
-            dict(label=f"回帰直線 (R²={res['regression']['r2']})", data=line,
-                 type="line", borderColor=PALETTE["line"], borderWidth=2,
-                 pointRadius=0, fill=False),
-        ]),
+        data=dict(
+            datasets=[
+                dict(label="患者", data=pts, backgroundColor=PALETTE["scatter"], pointRadius=3),
+                dict(
+                    label=f"回帰直線 (R²={res['regression']['r2']})",
+                    data=line,
+                    type="line",
+                    borderColor=PALETTE["line"],
+                    borderWidth=2,
+                    pointRadius=0,
+                    fill=False,
+                ),
+            ]
+        ),
         options=dict(
-            responsive=True, maintainAspectRatio=False,
-            plugins=dict(legend=dict(position="bottom"),
-                         title=dict(display=True, text="用量 vs PSA低下率")),
+            responsive=True,
+            maintainAspectRatio=False,
+            plugins=dict(
+                legend=dict(position="bottom"), title=dict(display=True, text="用量 vs PSA低下率")
+            ),
             scales=dict(
                 x=dict(title=dict(display=True, text="用量 (mg)")),
                 y=dict(title=dict(display=True, text="PSA低下率 (%)")),
@@ -94,25 +111,30 @@ def _association_chart(res: dict) -> dict:
 def _survival_chart(res: dict) -> dict:
     datasets = []
     for risk, curve in res["curves"].items():
-        datasets.append(dict(
-            label=risk,
-            data=[dict(x=p["t"], y=round(p["s"] * 100, 1)) for p in curve],
-            borderColor=PALETTE[risk], backgroundColor=PALETTE[risk],
-            stepped=True, pointRadius=0, fill=False,
-        ))
+        datasets.append(
+            dict(
+                label=risk,
+                data=[dict(x=p["t"], y=round(p["s"] * 100, 1)) for p in curve],
+                borderColor=PALETTE[risk],
+                backgroundColor=PALETTE[risk],
+                stepped=True,
+                pointRadius=0,
+                fill=False,
+            )
+        )
     return dict(
         type="line",
         data=dict(datasets=datasets),
         options=dict(
-            responsive=True, maintainAspectRatio=False,
-            plugins=dict(legend=dict(position="bottom"),
-                         title=dict(display=True,
-                                    text="無進行生存率 (Kaplan-Meier)")),
+            responsive=True,
+            maintainAspectRatio=False,
+            plugins=dict(
+                legend=dict(position="bottom"),
+                title=dict(display=True, text="無進行生存率 (Kaplan-Meier)"),
+            ),
             scales=dict(
-                x=dict(type="linear",
-                       title=dict(display=True, text="月数")),
-                y=dict(min=0, max=100,
-                       title=dict(display=True, text="無進行生存率 (%)")),
+                x=dict(type="linear", title=dict(display=True, text="月数")),
+                y=dict(min=0, max=100, title=dict(display=True, text="無進行生存率 (%)")),
             ),
         ),
     )
@@ -153,7 +175,8 @@ def _build_env() -> Environment:
     return Environment(
         loader=FileSystemLoader(str(TEMPLATES)),
         autoescape=select_autoescape(["html", "xml"]),
-        trim_blocks=True, lstrip_blocks=True,
+        trim_blocks=True,
+        lstrip_blocks=True,
     )
 
 
