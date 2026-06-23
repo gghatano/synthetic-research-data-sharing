@@ -21,6 +21,8 @@ dev = [
     "mypy==2.1.0",
     "pandas-stubs==3.0.3.260530",
     "pyyaml==6.0.3",
+    "playwright==1.60.0",
+    "pytest-playwright==0.8.0",
 ]
 
 # パッケージ配布は行わない（ビルド対象はあくまで site/）。
@@ -50,6 +52,8 @@ files = ["generator"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-q"
+# 既定実行から e2e(ブラウザ)を除外。`uv run pytest -m e2e` で e2e のみ実行する。
+addopts = "-q -m 'not e2e'"
+markers = ["e2e: browser end-to-end (needs network + http server)"]
 # リポジトリルートを import パスに加え、`from generator import ...` を解決する。
 pythonpath = ["."]
