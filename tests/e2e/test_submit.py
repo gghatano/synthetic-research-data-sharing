@@ -1,7 +1,8 @@
-"""E2E: 合成データでの分析→レポート入力→提出→個別ページ紐付け(PF-5 #25)。
+"""E2E: 分析プログラム＋結果のアップロード提出(#41, N2)。
 
-analyst が個別ページの分析ワークベンチで合成データの 3 分析を実行し、レポートを添えて
-提出すると、そのデータセットの「紐づく提出物」一覧に紐づいて表示されることを検証する。
+ワークベンチ(ブラウザ内 3 分析実行)は廃止され、提出は「合成データを手元に持ち帰り
+外部で開発 → プログラム＋結果(画像/テキスト)をアップロード」へ変更された。
+ここでは提出フォームの存在・バリデーション・提出反映・XSS 非実行を検証する。
 """
 
 from __future__ import annotations
@@ -9,107 +10,75 @@ from __future__ import annotations
 import pytest
 from playwright.sync_api import Page, expect
 
-from .helpers import (
-    goto_app,
-    open_analyze_tab,
-    open_workbench,
-    wait_chart_drawn,
-)
+from .helpers import goto_app, open_dataset, open_dataset_as, open_register
 
 pytestmark = pytest.mark.e2e
 
-# チップのアクセシブル名(index.html のボタン文言)。
-_CHIP_NAME = {
-    "clustering": "PSA軌跡クラスタリング",
-    "association": "投薬–PSA反応の関連分析",
-    "survival": "進行イベントの生存時間分析",
-}
+# 1x1 PNG(最小)。dataURL プレビュー確認用。
+_PNG_1X1 = bytes.fromhex(
+    "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4"
+    "890000000a49444154789c6360000002000154a24f9f0000000049454e44ae426082"
+)
+
+_PY_PROGRAM = b"import pandas as pd\n# cluster PSA trajectories\nprint('ok')\n"
 
 
-def _pick_and_wait(page: Page, analysis: str) -> None:
-    """分析チップを選び、合成フラグメント(Chart 描画)まで待つ。"""
-    page.get_by_role("button", name=_CHIP_NAME[analysis]).click()
-    fragment = page.locator(f"#analyst-result section.fragment[data-analysis='{analysis}']")
-    expect(fragment).to_be_visible()
-    wait_chart_drawn(page, f"chart-synthetic-{analysis}")
+def _set_program(page: Page, name: str = "analysis.py", buf: bytes = _PY_PROGRAM) -> None:
+    page.get_by_test_id("submit-program-file").set_input_files(
+        {"name": name, "mimeType": "text/x-python", "buffer": buf}
+    )
+    expect(page.get_by_test_id("program-status")).to_be_visible()
 
 
-def test_submit_block_hidden_before_analysis(page: Page, base_url: str) -> None:
-    """分析実行前は提出ブロック(レポート入力)が出ない。"""
-    open_workbench(page, base_url, name="分析 太郎", role="analyst")
-    open_analyze_tab(page)
-    expect(page.get_by_test_id("submit-block")).to_be_hidden()
+def test_workbench_is_removed(page: Page, base_url: str) -> None:
+    """個別ページから分析ワークベンチ(3 分析の htmx 実行 UI)が無くなっている。"""
+    open_dataset(page, base_url, "prostate-psa")
+    assert page.get_by_test_id("workbench").count() == 0
+    assert page.get_by_test_id("open-workbench").count() == 0
+    # 代わりに提出フォームが出る。
+    expect(page.get_by_test_id("submit-form")).to_be_visible()
 
 
-def test_submit_requires_report(page: Page, base_url: str) -> None:
-    """レポート未入力では提出できずエラーになる(提出物は増えない)。"""
-    open_workbench(page, base_url, name="分析 太郎", role="analyst")
-    open_analyze_tab(page)
-    _pick_and_wait(page, "clustering")
+def test_submit_program_and_text_result(page: Page, base_url: str) -> None:
+    """ログイン済みでプログラム＋結果テキストをアップロードし提出 → 一覧に反映。"""
+    open_dataset_as(page, base_url, name="分析 太郎", role="analyst")
 
-    expect(page.get_by_test_id("submit-block")).to_be_visible()
-    page.get_by_test_id("submit-to-dataset").click()
-    expect(page.get_by_test_id("submit-error")).to_be_visible()
-    assert page.get_by_test_id("submission-card").count() == 0
-
-
-def test_submit_flow_links_to_dataset(page: Page, base_url: str) -> None:
-    """分析実行→レポート入力→提出→個別ページの提出物一覧に紐づいて表示される。"""
-    open_workbench(page, base_url, name="分析 太郎", role="analyst")
-    open_analyze_tab(page)
-    _pick_and_wait(page, "clustering")
-
-    report = "responder クラスタが過半数。生データでの再現性を確認したい。"
-    page.get_by_test_id("submit-report").fill(report)
+    _set_program(page)
+    page.get_by_test_id("submit-result-text").fill("responder 比率 0.62 / p=0.03")
+    page.get_by_test_id("submit-report").fill("生データでの再現性を確認したい。")
     page.get_by_test_id("submit-to-dataset").click()
 
-    # 成功メッセージ。
     expect(page.get_by_test_id("submit-success")).to_be_visible()
 
-    # 紐づく提出物一覧に 1 件追加される。
-    cards = page.get_by_test_id("submission-card")
-    expect(cards.first).to_be_visible()
-    assert cards.count() == 1
-
-    card = cards.first
-    expect(card).to_have_attribute("data-analysis", "clustering")
+    card = page.get_by_test_id("submission-card").first
+    expect(card).to_be_visible()
+    expect(card.get_by_test_id("submission-program")).to_have_text("analysis.py")
     expect(card.get_by_test_id("submission-status")).to_have_text("submitted")
-    expect(card.get_by_test_id("submission-report")).to_have_text(report)
-    # 提出者(analyst 名)が出る。
-    expect(card.locator(".catalog-owner")).to_contain_text("分析 太郎")
-    # 適用コード抜粋がフラグメント由来で記録される。
-    expect(card.locator("details.frag-code code")).not_to_be_empty()
+    expect(card.get_by_test_id("submission-results-count")).to_contain_text("結果 1 件")
+    expect(card.get_by_test_id("submission-report")).to_contain_text("再現性")
 
-    # 提出物一覧の紐付けキーが dataset_id。
-    expect(page.get_by_test_id("submission-list")).to_have_attribute(
-        "data-dataset-id", "prostate-psa"
+
+def test_submit_program_and_image_result(page: Page, base_url: str) -> None:
+    """結果に画像(PNG)を添えるとプレビューが出て、提出すると結果件数に反映される。"""
+    open_dataset_as(page, base_url, name="分析 太郎", role="analyst")
+
+    _set_program(page)
+    page.get_by_test_id("submit-result-image").set_input_files(
+        {"name": "plot.png", "mimeType": "image/png", "buffer": _PNG_1X1}
     )
+    preview = page.get_by_test_id("result-image-preview")
+    expect(preview).to_be_visible()
+    # dataURL でプレビューしている(サーバー URL ではない)。
+    assert (preview.locator("img").get_attribute("src") or "").startswith("data:image/")
 
-
-def test_submit_multiple_accumulate(page: Page, base_url: str) -> None:
-    """同一データセットに複数提出が並ぶ。"""
-    open_workbench(page, base_url, name="分析 太郎", role="analyst")
-    open_analyze_tab(page)
-
-    _pick_and_wait(page, "clustering")
-    page.get_by_test_id("submit-report").fill("1 件目: クラスタリング所見。")
     page.get_by_test_id("submit-to-dataset").click()
-    expect(page.get_by_test_id("submission-card")).to_have_count(1)
-
-    _pick_and_wait(page, "association")
-    page.get_by_test_id("submit-report").fill("2 件目: 関連分析所見。")
-    page.get_by_test_id("submit-to-dataset").click()
-    expect(page.get_by_test_id("submission-card")).to_have_count(2)
-
-    analyses = page.locator("[data-testid='submission-card']").evaluate_all(
-        "els => els.map(e => e.getAttribute('data-analysis'))"
-    )
-    assert set(analyses) == {"clustering", "association"}
+    card = page.get_by_test_id("submission-card").first
+    expect(card.get_by_test_id("submission-results-count")).to_contain_text("結果 1 件")
 
 
-def test_submit_disabled_when_logged_out(page: Page, base_url: str) -> None:
-    """未ログインでは提出ボタンが無効でログイン導線が出る(閲覧は可・提出は要ログイン)。"""
-    # ログインせずに(カタログは公開閲覧可)個別ページ→ワークベンチを開く。
+def test_submit_requires_login(page: Page, base_url: str) -> None:
+    """未ログインでは提出ボタンが無効で、ログイン導線が出る。"""
+    # ログインせずにカタログ経由で個別ページへ。
     goto_app(page, base_url)
     page.get_by_test_id("login-to-catalog").click()
     page.wait_for_selector("[data-testid='explore-view']", state="visible")
@@ -118,36 +87,79 @@ def test_submit_disabled_when_logged_out(page: Page, base_url: str) -> None:
         "[data-testid='catalog-card'][data-dataset-id='prostate-psa'] [data-testid='catalog-open']"
     ).click()
     page.wait_for_selector("[data-testid='dataset-view']", state="visible")
-    page.wait_for_selector("[data-testid='dataset-title']", state="visible")
-    page.get_by_test_id("open-workbench").click()
-    page.wait_for_selector(
-        "section.panel:has(h2:has-text('合成データを公開する'))", state="visible"
-    )
-    open_analyze_tab(page)
-    _pick_and_wait(page, "clustering")
 
     expect(page.get_by_test_id("submit-to-dataset")).to_be_disabled()
     expect(page.get_by_test_id("submit-need-login")).to_be_visible()
-    assert page.get_by_test_id("submission-card").count() == 0
 
 
-def test_submit_keyed_per_dataset(page: Page, base_url: str) -> None:
-    """提出は dataset_id 単位。別データセットには紐づかない。"""
-    open_workbench(page, base_url, name="分析 太郎", role="analyst", dataset_id="renal-marker")
-    open_analyze_tab(page)
-    _pick_and_wait(page, "survival")
-    page.get_by_test_id("submit-report").fill("renal-marker への提出。")
+def test_submit_validation_missing_program(page: Page, base_url: str) -> None:
+    """プログラム未アップロードで提出するとエラー、提出物は増えない。"""
+    open_dataset_as(page, base_url, name="分析 太郎", role="analyst")
+    page.get_by_test_id("submit-result-text").fill("結果のみ")
     page.get_by_test_id("submit-to-dataset").click()
-    expect(page.get_by_test_id("submission-card")).to_have_count(1)
-    expect(page.get_by_test_id("submission-list")).to_have_attribute(
-        "data-dataset-id", "renal-marker"
-    )
-
-    # prostate-psa へ移動すると提出物は紐づかない(空状態)。
-    page.get_by_test_id("dataset-back").click()
-    page.locator(
-        "[data-testid='catalog-card'][data-dataset-id='prostate-psa'] [data-testid='catalog-open']"
-    ).click()
-    expect(page.get_by_test_id("dataset-view")).to_be_visible()
-    expect(page.get_by_test_id("submission-empty")).to_be_visible()
+    expect(page.get_by_test_id("submit-error")).to_be_visible()
     assert page.get_by_test_id("submission-card").count() == 0
+
+
+def test_result_image_rejects_svg(page: Page, base_url: str) -> None:
+    """結果画像に SVG(スクリプト混入の恐れ)を選ぶと拒否され、プレビューが出ない。"""
+    open_dataset_as(page, base_url, name="分析 太郎", role="analyst")
+    page.get_by_test_id("submit-result-image").set_input_files(
+        {
+            "name": "evil.svg",
+            "mimeType": "image/svg+xml",
+            "buffer": b"<svg xmlns='http://www.w3.org/2000/svg'><script>1</script></svg>",
+        }
+    )
+    expect(page.get_by_test_id("submit-error")).to_be_visible()
+    expect(page.get_by_test_id("result-image-preview")).to_be_hidden()
+
+
+def test_submit_validation_missing_result(page: Page, base_url: str) -> None:
+    """プログラムのみで結果が無いと提出できない(画像かテキストの一方が必須)。"""
+    open_dataset_as(page, base_url, name="分析 太郎", role="analyst")
+    _set_program(page)
+    page.get_by_test_id("submit-to-dataset").click()
+    expect(page.get_by_test_id("submit-error")).to_be_visible()
+    assert page.get_by_test_id("submission-card").count() == 0
+
+
+def test_uploaded_program_is_not_executed_xss_safe(page: Page, base_url: str) -> None:
+    """悪意あるファイル名/プログラム内容は x-text で文字列表示され、実行されない。"""
+    open_dataset_as(page, base_url, name="分析 太郎", role="analyst")
+
+    payload = b"<script>window.__pwned=1</script>\nprint('x')\n"
+    _set_program(page, name="<img src=x onerror=alert(1)>.py", buf=payload)
+
+    # アップロード直後、プログラム内容のプレビューは x-text で文字列表示(タグが実体化しない)。
+    preview = page.get_by_test_id("program-preview")
+    expect(preview.locator("code")).to_contain_text("<script>window.__pwned=1</script>")
+    # 注入された <script> 要素はドキュメントに存在せず、実行もされていない。
+    assert page.evaluate("() => window.__pwned") is None
+    assert page.locator("script:has-text('window.__pwned')").count() == 0
+
+    # 提出後、一覧カードのプログラム名も x-text 表示(ファイル名のタグが実体化しない)。
+    page.get_by_test_id("submit-result-text").fill("<b>not-bold</b>")
+    page.get_by_test_id("submit-to-dataset").click()
+    card = page.get_by_test_id("submission-card").first
+    expect(card.get_by_test_id("submission-program")).to_contain_text(
+        "<img src=x onerror=alert(1)>.py"
+    )
+    assert page.evaluate("() => window.__pwned") is None
+
+
+def test_user_dataset_has_no_submit_form(page: Page, base_url: str) -> None:
+    """ユーザー登録分(user-<n>)は合成データ未生成のため提出フォームを出さない。"""
+    open_register(page, base_url)
+    page.get_by_test_id("reg-title").fill("提出不可データセット")
+    page.get_by_test_id("reg-description").fill("ダミーのみ。")
+    page.get_by_test_id("reg-domain").fill("test")
+    page.get_by_test_id("reg-sample-select").select_option("renal-egfr")
+    page.get_by_test_id("reg-submit").click()
+    page.get_by_test_id("reg-open").first.click()
+    page.wait_for_selector("[data-testid='dataset-view']", state="visible")
+
+    expect(page.get_by_test_id("dataset-no-submission")).to_be_visible()
+    assert page.get_by_test_id("submit-form").count() == 0  # x-if で DOM から除去
+    # 合成データのダウンロード導線も出ない(#40 の仮定と整合。x-show で非表示)。
+    expect(page.get_by_test_id("download-synthetic")).to_be_hidden()

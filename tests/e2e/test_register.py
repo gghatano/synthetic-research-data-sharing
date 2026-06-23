@@ -86,10 +86,10 @@ def test_register_delete_and_reset(page: Page, base_url: str) -> None:
     expect(page.get_by_test_id("reg-registered-empty")).to_be_visible()
 
 
-def test_register_user_dataset_detail_has_no_workbench(page: Page, base_url: str) -> None:
-    """ユーザー登録分の個別ページは分析ワークベンチを出さず注記を表示する。"""
+def test_register_user_dataset_detail_has_no_submit_form(page: Page, base_url: str) -> None:
+    """ユーザー登録分の個別ページは合成データ未生成のため提出フォームを出さず注記を表示する。"""
     open_register(page, base_url)
-    _fill_metadata(page, "ワークベンチ無しデータセット")
+    _fill_metadata(page, "提出フォーム無しデータセット")
     page.get_by_test_id("reg-sample-select").select_option("renal-egfr")
     page.get_by_test_id("reg-submit").click()
 
@@ -97,9 +97,10 @@ def test_register_user_dataset_detail_has_no_workbench(page: Page, base_url: str
     page.get_by_test_id("reg-open").first.click()
     page.wait_for_selector("[data-testid='dataset-view']", state="visible")
     expect(page.get_by_test_id("dataset-title")).to_be_visible()
-    # 分析ワークベンチを開くボタンは出ず、未生成の注記が出る。
-    expect(page.get_by_test_id("dataset-no-workbench")).to_be_visible()
-    expect(page.get_by_test_id("open-workbench")).to_be_hidden()
+    # 提出フォーム/合成データ DL は出ず、未生成の注記が出る。
+    expect(page.get_by_test_id("dataset-no-submission")).to_be_visible()
+    assert page.get_by_test_id("submit-form").count() == 0  # x-if で DOM から除去
+    expect(page.get_by_test_id("download-synthetic")).to_be_hidden()  # x-show で非表示
     # メタデータ/活用例は表示される。
     expect(page.locator("[data-testid='dataset-usage'] .usage-list li").first).to_be_visible()
 
@@ -114,8 +115,8 @@ def test_analyst_cannot_reach_register(page: Page, base_url: str) -> None:
     expect(page.get_by_test_id("top-view")).to_be_visible()
 
 
-def test_register_existing_dataset_still_has_workbench(page: Page, base_url: str) -> None:
-    """登録機能を入れても、同梱データセットの分析ワークベンチは従来どおり開ける(回帰)。"""
+def test_register_existing_dataset_still_has_submit_form(page: Page, base_url: str) -> None:
+    """登録機能を入れても、同梱データセットの提出フォームは従来どおり出る(回帰)。"""
     open_register(page, base_url)
     # 何も登録せずカタログから既存データセットを開く。
     page.get_by_test_id("nav-explore").click()
@@ -124,6 +125,6 @@ def test_register_existing_dataset_still_has_workbench(page: Page, base_url: str
         "[data-testid='catalog-card'][data-dataset-id='prostate-psa'] [data-testid='catalog-open']"
     ).click()
     page.wait_for_selector("[data-testid='dataset-view']", state="visible")
-    # 既存データセットはワークベンチ導線あり / 未生成注記なし。
-    expect(page.get_by_test_id("open-workbench")).to_be_visible()
-    expect(page.get_by_test_id("dataset-no-workbench")).to_be_hidden()
+    # 既存データセットは提出フォームあり / 未生成注記なし。
+    expect(page.get_by_test_id("submit-form")).to_be_visible()
+    expect(page.get_by_test_id("dataset-no-submission")).to_be_hidden()

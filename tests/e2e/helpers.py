@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from playwright.sync_api import Page, expect
+from playwright.sync_api import Page
 
-# 分析の網羅対象。
+# 分析の網羅対象。ワークベンチ撤去(#41)で現行テストからは未使用だが、
+# 合成≈生デモ面(#43, N4)の分析網羅テストで再利用するため残す。
 ANALYSES = ["clustering", "association", "survival"]
 
 # expect / アクションの既定タイムアウト(ミリ秒)。CDN/htmx 待ちに余裕を持たせる。
@@ -57,28 +58,13 @@ def open_register(page: Page, base_url: str) -> None:
     page.wait_for_selector("[data-testid='register-view']", state="visible")
 
 
-def open_app(page: Page, base_url: str) -> None:
-    """アプリを開き、owner ログイン→カタログ→個別ページ→分析ワークベンチまで遷移して待つ。
-
-    既存の 3 ロールデモは PF-3 でカタログ個別ページ配下の「分析ワークベンチ」に内包された。
-    既存 E2E はこのワークベンチを前提とするため、ここで一連の遷移をまとめて行う
-    (マークアップ・data 属性・id は不変なので、これ以降のセレクタは従来どおり)。
-    """
-    open_dataset(page, base_url, "prostate-psa")
-    page.get_by_test_id("open-workbench").click()
-    # 公開パネルが Alpine の x-show で可視化されるまで待つ。
-    page.wait_for_selector(
-        "section.panel:has(h2:has-text('合成データを公開する'))", state="visible"
-    )
-
-
-def open_workbench(
+def open_dataset_as(
     page: Page, base_url: str, *, name: str, role: str, dataset_id: str = "prostate-psa"
 ) -> None:
-    """指定ロールでログイン→個別ページ→分析ワークベンチを開いて待つ(#25)。
+    """指定ロールでログイン→個別ページまで遷移して待つ(#41 提出フロー)。
 
-    `open_app` は owner 固定だが、提出フロー(#25)は analyst を主体に検証したいため、
-    ログインユーザーを差し替えられる版を用意する。
+    提出(プログラム＋結果アップロード)は要ログインのため、ログインユーザーを
+    差し替えられる版を用意する。提出は analyst を主体に検証する。
     """
     goto_app(page, base_url)
     login(page, name, role)
@@ -90,31 +76,10 @@ def open_workbench(
     ).click()
     page.wait_for_selector("[data-testid='dataset-view']", state="visible")
     page.wait_for_selector("[data-testid='dataset-title']", state="visible")
-    page.get_by_test_id("open-workbench").click()
-    page.wait_for_selector(
-        "section.panel:has(h2:has-text('合成データを公開する'))", state="visible"
-    )
 
 
-def open_analyze_tab(page: Page) -> None:
-    """ワークベンチの公開→分析タブまで進めて待つ(提出フローの前段)。"""
-    page.locator("section.panel button.primary").first.click()  # 公開
-    page.get_by_role("tab", name="② 分析者：ワークベンチ").click()
-    expect(
-        page.locator("section.panel:has(h2:has-text('合成データで分析を開発する'))")
-    ).to_be_visible()
-
-
-def alpine_state(page: Page) -> dict:
-    """ワークベンチの x-data(workflow) の状態を取り出す。最終 DOM 反映の補助確認用。"""
-    return page.evaluate(
-        "() => { const r = document.querySelector('[data-testid=workbench]'); "
-        "const d = Alpine.$data(r); "
-        "return { role: d.role, phase: d.phase, selected: d.selected, "
-        "submitted: d.submitted, loaded: d.loaded }; }"
-    )
-
-
+# 以下 2 つの Chart ヘルパは、ワークベンチ撤去(#41)で現行テストからは未使用。
+# 合成≈生デモ面(#43, N4)で Chart 描画/二重描画ガードを検証する際に再利用する。
 def chart_is_drawn(page: Page, canvas_id: str) -> bool:
     """canvas に Chart インスタンスが紐づいているか(Chart.getChart が truthy)。"""
     return bool(
