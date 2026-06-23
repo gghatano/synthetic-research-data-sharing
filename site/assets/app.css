@@ -146,6 +146,10 @@ a.primary.download-link {
   text-decoration: none;
 }
 a.primary.download-link:hover { background: var(--brand-dark); }
+/* 合成データ CSV ダウンロード(#51): テーブル単位の小さなボタン群。 */
+.csv-note { margin-top: 14px; }
+.actions.csv-actions { margin-top: 8px; gap: 10px; }
+button.csv-link { font-size: .85rem; padding: 8px 14px; }
 button.ghost {
   background: transparent; border: 1px solid var(--brand); color: var(--brand);
   padding: 10px 16px; border-radius: 8px; cursor: pointer;

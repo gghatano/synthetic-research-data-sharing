@@ -39,6 +39,30 @@ def test_synthetic_download_fires(page: Page, base_url: str) -> None:
     assert download.suggested_filename == "prostate-psa-synthetic.json"
 
 
+def test_synthetic_csv_download_buttons_present(page: Page, base_url: str) -> None:
+    """個別ページにテーブル単位の合成データ CSV ダウンロードボタンがある(#51)。"""
+    open_dataset(page, base_url, "prostate-psa")
+
+    section = page.get_by_test_id("download-synthetic-csv")
+    expect(section).to_be_visible()
+    # meta を除く各テーブル(patients / psa_measurements / medications)のボタンがある。
+    expect(page.get_by_test_id("download-synthetic-csv-patients")).to_be_visible()
+    expect(page.get_by_test_id("download-synthetic-csv-psa_measurements")).to_be_visible()
+    expect(page.get_by_test_id("download-synthetic-csv-medications")).to_be_visible()
+
+
+def test_synthetic_csv_download_fires(page: Page, base_url: str) -> None:
+    """CSV ボタンのクリックで download が発火し、ファイル名が .csv で終わる(#51)。"""
+    open_dataset(page, base_url, "prostate-psa")
+
+    with page.expect_download() as dl_info:
+        page.get_by_test_id("download-synthetic-csv-patients").click()
+    download = dl_info.value
+    # ファイル名は <dataset_id>-<table>-synthetic.csv。
+    assert download.suggested_filename == "prostate-psa-patients-synthetic.csv"
+    assert download.suggested_filename.endswith(".csv")
+
+
 def test_raw_has_no_download_affordance(page: Page, base_url: str) -> None:
     """生データ(raw)をダウンロードさせる導線が UI に存在しない。"""
     open_dataset(page, base_url, "prostate-psa")
