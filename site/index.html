@@ -19,15 +19,14 @@
     本番では TRE/サーバー側のセッションと認可で隔離する(ここはあくまで UI 上の擬似)。
 
     ビュー: login | top | register | explore(カタログ一覧) | dataset(個別ページ)
-          | demo(カタログ外の原理デモ面)
-    カタログ一覧・個別ページ・原理デモは「誰でも閲覧可」: ログイン不要でアクセスできる。
+    カタログ一覧・個別ページは「誰でも閲覧可」: ログイン不要でアクセスできる。
     register(データ登録)のみ owner 専用ガードを掛ける。
   -->
   <script>
     document.addEventListener("alpine:init", () => {
       Alpine.store("session", {
         user: null, // { name, role } | null
-        view: "login", // login | top | register | explore | dataset | demo
+        view: "login", // login | top | register | explore | dataset
         currentDatasetId: null, // dataset ビューで表示中のデータセット
         presets: [
           { name: "保田 オーナー", role: "owner" },
@@ -50,13 +49,12 @@
           this.user = null;
           this.view = "login";
         },
-        // 公開閲覧できるビュー(ログイン不要)。demo はカタログ外の原理デモ面(#43)。
+        // 公開閲覧できるビュー(ログイン不要)。
         isPublicView(view) {
           return (
             view === "login" ||
             view === "explore" ||
-            view === "dataset" ||
-            view === "demo"
+            view === "dataset"
           );
         },
         go(view) {
@@ -198,7 +196,35 @@
           s.reviewedAt = new Date().toISOString();
           return s;
         },
+        // 仮想(プリセット)提出物の初期配置(#53)。提出物一覧/審査が初回から空でない
+        // ようにデモ用の架空提出物を 1 度だけ流し込む。各 preset は明示 id("preset-<n>")
+        // を持つため "sub-<n>" 採番(seq)とは衝突しない(seq はユーザー提出のみ進む)。
+        // 冪等: 同じ id を二重に入れない(複数ビューからの初期化や HMR 的再評価に備える)。
+        // in-memory のためハードリロードでリセット(localStorage 不使用 = 既存デモと同思想)。
+        seeded: false, // seed 実行済みフラグ(冪等性)
+        seed(presets) {
+          if (this.seeded) return;
+          this.seeded = true;
+          for (const p of presets || []) {
+            if (!this.byDataset[p.datasetId]) this.byDataset[p.datasetId] = [];
+            // 念のため同一 id の重複を避ける(冪等)。
+            if (this.byDataset[p.datasetId].some((s) => s.id === p.id)) continue;
+            this.byDataset[p.datasetId].push({
+              ...p,
+              // 結果配列は共有定義由来のため浅いコピーで実体を分ける(参照共有を避ける)。
+              results: (p.results || []).map((r) => ({ ...r })),
+              isPreset: true, // デモ成果物であることの目印(UI バッジ用)
+            });
+          }
+        },
       });
+
+      // 仮想(プリセット)提出物を初期配置する(#53)。store 定義後に 1 度だけ流し込み、
+      // 提出→審査フローを初回から体験できるようにする。プログラム/結果/レポートの素材は
+      // 既存の内蔵サンプル(DEMO_SUBMISSIONS, #52)を再利用し、analyst 名・提出時刻・
+      // 分析の焦点だけ preset ごとに差し替える。status は submitted/approved を混在させ、
+      // 一覧・詳細で状態差が見えるようにする(approved は reviewedBy/reviewedAt を持つ)。
+      Alpine.store("submissions").seed(PRESET_SUBMISSIONS);
     });
   </script>
 </head>
@@ -242,10 +268,6 @@
             :class="{ sel: $store.session.view === 'explore'
                           || $store.session.view === 'dataset' }"
             @click="$store.session.go('explore')">データカタログ</button>
-    <!-- カタログ外の原理デモ面(#43, N4): 誰でも閲覧可。 -->
-    <button data-testid="nav-demo"
-            :class="{ sel: $store.session.view === 'demo' }"
-            @click="$store.session.go('demo')">原理デモ</button>
   </nav>
 
   <main>
@@ -357,6 +379,23 @@
         メモリ上のカタログに追加するだけで、ハードリロードで消えます。本番では TRE
         (Trusted Research Environment)内で生データから合成データを生成・検証します。
         <strong>ここで扱うデータはすべて架空</strong>です(実患者データを入力しないでください)。</p>
+
+      <!-- ---- デモ用ワンクリック登録(#55) ---- -->
+      <!--
+        手入力なしで「登録 → カタログ反映 → 個別ページ」を素早く見せるための
+        デモ専用ショートカット。owner 限定の register ビュー内にあるので追加ガードは不要。
+        通常の手入力フォームと同じ catalog.register() を通すため、登録結果は手動登録と同一。
+        架空データである旨を添える(本番では使わない便宜機能)。
+      -->
+      <section class="reg-demo" data-testid="reg-demo">
+        <div class="reg-demo-text">
+          <strong>デモを素早く試す</strong>
+          <p class="frag-note">手入力なしで架空のデモ用データセットをカタログに登録します
+            (便宜機能・架空データ)。登録後は新規データセットの個別ページを開きます。</p>
+        </div>
+        <button class="primary" type="button" data-testid="reg-demo-register"
+                @click="registerDemo()">デモ用データを登録</button>
+      </section>
 
       <form class="register-form" @submit.prevent="submit()">
         <!-- ---- メタデータ ---- -->
@@ -635,6 +674,25 @@
                  :href="syntheticHref" :download="syntheticFilename">
                 合成データ(JSON)をダウンロード ↓</a>
             </div>
+
+            <!--
+              合成データの CSV ダウンロード(#51)。JSON に加え、テーブル単位の CSV を提供する。
+              方式 B(クライアント側変換): クリック時に synthetic.json を fetch し、meta を除く
+              各テーブル配列(patients / *_measurements / medications …)を RFC4180 準拠の CSV へ
+              変換して Blob ダウンロードする。生成物(site/data/**)は一切変更しない。
+              ファイル名は <dataset_id>-<table>-synthetic.csv。生データ(raw)は CSV でも提供しない。
+              データの DOM 注入(innerHTML/x-html)は行わず、テキストは標準 API のみで扱う。
+            -->
+            <p class="frag-note csv-note">テーブルごとに <strong>CSV</strong> でも取得できます
+              (synthetic.json をブラウザ内で変換)。</p>
+            <div class="actions csv-actions" data-testid="download-synthetic-csv">
+              <template x-for="t in csvTables" :key="t">
+                <button type="button" class="ghost csv-link"
+                        :data-testid="'download-synthetic-csv-' + t"
+                        @click="downloadTableCsv(t)"
+                        x-text="t + ' (CSV) ↓'"></button>
+              </template>
+            </div>
           </section>
 
           <!--
@@ -727,6 +785,29 @@
                   提出にはログインが必要です。
                   <a href="#" @click.prevent="$store.session.go('login')">ログインへ</a></span>
               </div>
+
+              <!--
+                デモ用ワンクリック提出(#55 の登録ボタンと同思想・便宜機能)。
+                ファイルを用意せず、内蔵のサンプル(プログラム＋結果テキスト＋所見)を
+                そのまま submissions.add() へ流し、提出→審査フローを素早く試せる。
+                提出は要ログインなので手動提出と同じ認証ガード(未ログインで無効化)。
+                サンプルは複数あり、クリックごとに次を巡回提出する。
+                プログラムは実行されず、表示・保管のみ(手動提出と同じ)。
+              -->
+              <div class="reg-demo submit-demo" data-testid="submit-demo-box">
+                <div class="reg-demo-text">
+                  <strong>デモを素早く試す</strong>
+                  <p class="frag-note">ファイル準備なしで、内蔵の架空サンプル
+                    (分析プログラム＋結果＋所見)をそのまま提出します(便宜機能)。
+                    クリックごとに次のサンプルを提出します。提出物は実行されず表示のみ。</p>
+                </div>
+                <button class="ghost" type="button" data-testid="submit-demo"
+                        @click="submitDemo()"
+                        :disabled="!$store.session.isAuthed()"
+                        :title="!$store.session.isAuthed()
+                          ? 'ログインすると提出できます' : ''">
+                  デモ用のサンプルを提出</button>
+              </div>
             </div>
             </template>
           </section>
@@ -735,8 +816,7 @@
             紐づく提出物一覧(#41 が書き込む)＋審査(#42, N3)。各カードは提出物の概要
             (プログラム名・結果件数・レポート・status)を表示する。owner だけに「審査する」導線を
             出し(擬似ガード)、選んだ提出物の【プログラム(コード)＋結果(画像/テキスト)＋レポート】を
-            閲覧 → 承認で status を approved に遷移させる。生データ並置(合成≈生)はここでは行わない
-            (核メッセージのデモはカタログ外の専用面 = §7.10, #43)。
+            閲覧 → 承認で status を approved に遷移させる。生データ並置(合成≈生)はここでは行わない。
           -->
           <section class="dataset-section" data-testid="dataset-submissions"
                    x-data="reviewPanel()">
@@ -764,6 +844,9 @@
                   <div class="submission-head">
                     <strong data-testid="submission-program"
                             x-text="s.program?.name || 'program'"></strong>
+                    <!-- デモ用プリセット(#53)であることの目印(架空成果物)。 -->
+                    <span class="preset-badge" data-testid="submission-preset-badge"
+                          x-show="s.isPreset" x-cloak>デモ</span>
                     <span class="role-pill" data-testid="submission-status"
                           :class="{ approved: s.status === 'approved' }"
                           x-text="s.status"></span>
@@ -865,10 +948,7 @@
                 <p class="review-callout" data-testid="review-callout"
                    x-show="reviewing.status === 'approved'" x-cloak>
                   ✅ この提出物を<strong>承認しました</strong>。本番では TRE 内で同じプログラムを
-                  生データへ適用し、結果(本物のレポート)を作成します。「合成データで開発した同一
-                  コードが生データでも近い結果になる」原理のデモは、カタログ外の
-                  <a href="#" data-testid="review-demo-link"
-                     @click.prevent="$store.session.go('demo')">専用デモ面</a>で確認できます。</p>
+                  生データへ適用し、結果(本物のレポート)を作成します。</p>
               </div>
               </template>
             </section>
@@ -876,63 +956,11 @@
         </div>
       </template>
     </section>
-
-    <!-- ======================= 原理デモ面(カタログ外, #43, N4) ======================= -->
-    <!--
-      「同一コードが合成・生で動き、結果は近いが非同一」という核メッセージは、アプリで見せる
-      実コンテンツ(カタログ/提出/審査)ではなく【デモ成果物】である。そのため、データカタログ
-      には置かず、このカタログ外の専用デモ面に配置する(#39 確定方針)。
-      事前生成済みフラグメント(analyst=合成 / owner=生)を 1 データセット(prostate-psa)で
-      並置する。canvas id は合成=chart-synthetic-<a> / 生=chart-raw-<a> で別 id のため衝突しない。
-    -->
-    <section class="demo-view" data-testid="demo-view"
-             x-show="$store.session.view === 'demo'" x-cloak
-             x-data="demoPage()">
-      <header class="demo-head">
-        <h2>原理デモ：合成データで開発したコードが、生データでも“近いが非同一”に動く</h2>
-        <p class="frag-note demo-note" data-testid="demo-disclaimer">
-          これは<strong>デモ成果物</strong>です(データカタログには置きません)。同一の分析を
-          <strong>合成データ</strong>と<strong>生データ</strong>に適用した事前計算結果を並置し、
-          「合成 → 生」が<strong>近いが完全には一致しない</strong>ことを示します。生データは
-          TRE に隔離され公開しません(ここでは事前生成済みの結果のみを読み込みます)。</p>
-      </header>
-
-      <!-- 分析の選択(prostate-psa の 3 分析)。 -->
-      <div class="analysis-picker" data-testid="demo-picker">
-        <template x-for="a in analyses" :key="a.id">
-          <button class="chip" :class="{ sel: selected === a.id }"
-                  :data-analysis="a.id"
-                  @click="pick(a.id)" x-text="a.title"></button>
-        </template>
-      </div>
-
-      <p class="placeholder" data-testid="demo-empty" x-show="!selected" x-cloak>
-        上のボタンから分析を選ぶと、合成データと生データの結果を並べて表示します。</p>
-
-      <div class="compare" x-show="selected" x-cloak>
-        <div class="compare-col">
-          <h3 class="col-head synthetic">合成データの結果</h3>
-          <div id="demo-synthetic" class="result-pane"></div>
-        </div>
-        <div class="compare-col">
-          <h3 class="col-head raw">生データの結果(TRE 内で事前計算)</h3>
-          <div id="demo-raw" class="result-pane"></div>
-        </div>
-      </div>
-
-      <p class="review-callout demo-callout" data-testid="demo-callout"
-         x-show="selected" x-cloak>
-        ✅ 同じ分析コードが両データで動作しました。結果は<strong>近いが完全には一致しません</strong>
-        (個票が異なるため)。だからこそ、分析者は<strong>合成データで安全に開発</strong>し、最後に
-        オーナーが<strong>生データへ適用</strong>するステップに価値があります。</p>
-    </section>
   </main>
 
   <footer class="site-foot">
     <p>静的デモ (GitHub Pages) — htmx + Alpine.js + Chart.js。データと分析は Python
       (pandas / scikit-learn) で事前計算。
-      <a href="#" data-testid="foot-demo-link"
-         @click.prevent="$store.session.go('demo')">原理デモ</a> /
       <a href="../docs/SPEC.md">仕様書</a></p>
   </footer>
 
@@ -954,6 +982,61 @@
         uploadStatus: "",
         error: "",
         success: "",
+        demoSeq: 0,           // デモ用データセットの巡回インデックス(#55)
+        // デモ用ワンクリック登録(#55)で使う架空データセット定義。
+        // catalog.json の datasets[] と同形(title/description/owner/domain/tags/
+        // usage_examples/n_patients/dummy_preview)。owner は登録時に補完する。
+        // 分析フラグメント(synthetic/raw)は持たないため、個別ページでは
+        // メタデータ+ダミーのみ表示され、合成データ DL は出ない(hasSyntheticDownload=false)。
+        // 複数定義し、クリックごとに次を登録する(巡回)。
+        demoDatasets: [
+          {
+            title: "心不全 再入院リスク コホート(デモ)",
+            description: "退院後 30 日以内の再入院に関連する指標を集めた架空コホート。" +
+              "デモ用の合成/ダミーデータで、実患者データは一切含みません。",
+            domain: "cardiology",
+            tags: ["heart-failure", "readmission", "longitudinal"],
+            usage_examples: [
+              "再入院リスクのロジスティック回帰でリスク因子を同定する",
+              "退院後フォローアップ間隔と再入院率の関連を可視化する",
+            ],
+            n_patients: 180,
+            dummy_preview: {
+              patients: [
+                { patient_id: "HF-001", age: 72, risk_group: "high", enrollment_date: "2023-01-12" },
+                { patient_id: "HF-002", age: 64, risk_group: "moderate", enrollment_date: "2023-02-03" },
+                { patient_id: "HF-003", age: 81, risk_group: "high", enrollment_date: "2023-02-20" },
+              ],
+              medications: [
+                { patient_id: "HF-001", datetime: "2023-01-13T08:30", drug: "furosemide", dose_mg: 40 },
+                { patient_id: "HF-002", datetime: "2023-02-04T09:15", drug: "carvedilol", dose_mg: 12 },
+              ],
+            },
+          },
+          {
+            title: "2 型糖尿病 HbA1c 推移(デモ)",
+            description: "血糖管理マーカー(HbA1c)の経時推移を含む架空データセット。" +
+              "デモ用のダミーデータのみで、生データは共有されません。",
+            domain: "endocrinology",
+            tags: ["diabetes", "hba1c", "marker"],
+            usage_examples: [
+              "HbA1c 軌跡のクラスタリングで管理パターンを分類する",
+              "投薬変更前後の HbA1c 変化を比較する",
+            ],
+            n_patients: 140,
+            dummy_preview: {
+              patients: [
+                { patient_id: "DM-01", age: 55, risk_group: "moderate", enrollment_date: "2022-09-01" },
+                { patient_id: "DM-02", age: 48, risk_group: "low", enrollment_date: "2022-10-11" },
+              ],
+              psa_measurements: [
+                { patient_id: "DM-01", date: "2022-09-05", psa: 7.2 },
+                { patient_id: "DM-01", date: "2022-12-05", psa: 6.8 },
+                { patient_id: "DM-02", date: "2022-10-15", psa: 6.1 },
+              ],
+            },
+          },
+        ],
         // 事前同梱サンプル(ブラウザ内蔵の小さなダミー。生成ではなく固定値)。
         samples: [
           {
@@ -1082,6 +1165,22 @@
           this.success = "登録しました(" + id + ")。データカタログに反映されました。";
           this.resetForm();
         },
+        // デモ用ワンクリック登録(#55)。手入力フォームと同じ catalog.register() を通し、
+        // owner だけを登録時に補完する(他フィールドは demoDatasets 定義をそのまま使用)。
+        // クリックごとに demoDatasets を巡回し、登録直後に新規データセットの個別ページを開く。
+        registerDemo() {
+          this.error = "";
+          this.success = "";
+          const def = this.demoDatasets[this.demoSeq % this.demoDatasets.length];
+          this.demoSeq += 1;
+          const entry = {
+            ...def,
+            owner: this.$store.session.user?.name || "owner",
+          };
+          const id = this.$store.catalog.register(entry);
+          // 登録後は新規データセットの個別ページへ遷移して即座に確認できるようにする。
+          this.$store.session.openDataset(id);
+        },
         resetForm() {
           this.form = {
             title: "", description: "", domain: "",
@@ -1192,12 +1291,83 @@
           const id = this.dataset && this.dataset.dataset_id;
           return id ? id + "-synthetic.json" : "synthetic.json";
         },
+        // 合成データ CSV ダウンロード(#51)。配布対象は synthetic.json の各テーブル配列
+        // (meta を除く top-level の配列)。テーブル名は現在のデータセットを開いたときに
+        // synthetic.json を一度だけ fetch して導出する(キャッシュ)。生データは扱わない。
+        csvTables: [],
+        _csvCache: { id: null, data: null },
+        // synthetic.json を取得してキャッシュする(同一データセットでは一度きり)。
+        async _fetchSynthetic() {
+          const id = this.dataset && this.dataset.dataset_id;
+          if (!id) return null;
+          if (this._csvCache.id === id && this._csvCache.data) {
+            return this._csvCache.data;
+          }
+          const res = await fetch("data/" + id + "/synthetic.json");
+          if (!res.ok) throw new Error("synthetic.json の取得に失敗しました");
+          const data = await res.json();
+          this._csvCache = { id, data };
+          return data;
+        },
+        // meta を除く top-level の配列キー(テーブル名)を返す。
+        _tableNames(data) {
+          return Object.keys(data || {}).filter(
+            (k) => k !== "meta" && Array.isArray(data[k])
+          );
+        },
+        // 個別ページ表示時に CSV ボタン用のテーブル名一覧を用意する。
+        async loadCsvTables() {
+          this.csvTables = [];
+          if (!this.hasSyntheticDownload) return;
+          try {
+            const data = await this._fetchSynthetic();
+            this.csvTables = this._tableNames(data);
+          } catch (e) {
+            // 取得失敗時は CSV 導線を出さない(JSON 導線は別途残る)。
+            this.csvTables = [];
+          }
+        },
+        // 行配列(オブジェクトの配列)を RFC4180 準拠の CSV 文字列へ変換する。
+        // ヘッダは先頭行のキー順で固定。カンマ/二重引用符/改行を含むセルは
+        // 二重引用符で囲み、内部の二重引用符は二重化してエスケープする。
+        toCsv(rows) {
+          if (!Array.isArray(rows) || rows.length === 0) return "";
+          const headers = Object.keys(rows[0]);
+          const esc = (v) => {
+            const s = v === null || v === undefined ? "" : String(v);
+            return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+          };
+          const lines = [headers.map(esc).join(",")];
+          for (const row of rows) {
+            lines.push(headers.map((h) => esc(row[h])).join(","));
+          }
+          return lines.join("\r\n");
+        },
+        // 指定テーブルを CSV に変換し Blob ダウンロードを発火する。
+        async downloadTableCsv(table) {
+          const id = this.dataset && this.dataset.dataset_id;
+          if (!id) return;
+          const data = await this._fetchSynthetic();
+          const rows = data && data[table];
+          if (!Array.isArray(rows)) return;
+          const csv = this.toCsv(rows);
+          const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = id + "-" + table + "-synthetic.csv";
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        },
         // 共有ストアの currentDatasetId 変化に追従して表示対象を切り替える。
         syncCurrent(datasetId) {
           if (!datasetId) return;
           const d = this.$store.catalog.find(datasetId);
           if (d && d !== this.dataset) {
             this.dataset = d;
+            this.loadCsvTables();
           }
         },
         // dummy_preview を表示用テーブル定義(列順固定)に整形する。
@@ -1271,12 +1441,166 @@
     // 分析プログラム＋結果の提出フォーム(#41, N2)。datasetPage 配下にネストされ、
     // 親スコープの dataset を参照できる。アップロードしたプログラムは実行せず、
     // FileReader でテキスト/画像(dataURL)を読み込み、共有ストア submissions へ保存する。
+    // デモ用ワンクリック提出(#52)で使う内蔵サンプル提出物。
+    // Submission スキーマと同形(program{name,text}/results[]/report)。
+    // analyst/status/id/submittedAt はクリック時に submissions.add() が補完するため持たない。
+    // 結果は type:"text" のみ(大きな dataURL を避ける)。プログラムは実行されず表示・保管のみ。
+    // #53(プリセット seed)が同じ定義を再利用できるよう、独立した名前付き定数として置く。
+    const DEMO_SUBMISSIONS = [
+      {
+        program: {
+          name: "clustering.py",
+          text:
+            "import pandas as pd\n" +
+            "from sklearn.cluster import KMeans\n" +
+            "from sklearn.preprocessing import StandardScaler\n" +
+            "\n" +
+            "# 合成データを読み込み、患者を 3 クラスタに分割する\n" +
+            "df = pd.read_csv('synthetic_patients.csv')\n" +
+            "X = df[['age', 'psa_baseline', 'psa_slope']]\n" +
+            "Xs = StandardScaler().fit_transform(X)\n" +
+            "km = KMeans(n_clusters=3, random_state=42, n_init=10)\n" +
+            "df['cluster'] = km.fit_predict(Xs)\n" +
+            "\n" +
+            "summary = df.groupby('cluster')['responder'].mean()\n" +
+            "print(summary)\n",
+        },
+        results: [
+          {
+            type: "text",
+            name: "クラスタ別 responder 比率",
+            content:
+              "cluster  n    responder_rate\n" +
+              "0        58   0.41\n" +
+              "1        72   0.63\n" +
+              "2        45   0.78\n" +
+              "\n" +
+              "クラスタ 2 で responder 比率が最も高い(0.78)。",
+          },
+        ],
+        report:
+          "PSA ベースライン/傾きで 3 クラスタに分割。クラスタ 2 で responder 比率が高い傾向。" +
+          "生データでの再現性を確認したい。",
+      },
+      {
+        program: {
+          name: "dose_response.py",
+          text:
+            "import numpy as np\n" +
+            "import pandas as pd\n" +
+            "import statsmodels.formula.api as smf\n" +
+            "\n" +
+            "# 用量と反応の回帰(合成データ)。生データへの適用前の探索。\n" +
+            "df = pd.read_csv('synthetic_dose.csv')\n" +
+            "df['log_dose'] = np.log1p(df['dose_mg'])\n" +
+            "model = smf.logit('responder ~ log_dose + age', data=df).fit()\n" +
+            "print(model.summary())\n",
+        },
+        results: [
+          {
+            type: "text",
+            name: "用量反応 回帰サマリ",
+            content:
+              "term       coef    std_err   p\n" +
+              "Intercept  -2.10   0.44      <0.001\n" +
+              "log_dose    0.58   0.12      <0.001\n" +
+              "age        -0.01   0.01       0.21\n" +
+              "\n" +
+              "log_dose に有意な正の関連(p<0.001)。",
+          },
+        ],
+        report:
+          "用量(log)と反応に有意な正の関連。年齢の寄与は小さい。" +
+          "TRE 内で生データに適用して効果量を再確認したい。",
+      },
+      {
+        program: {
+          name: "survival_km.py",
+          text:
+            "import pandas as pd\n" +
+            "from lifelines import KaplanMeierFitter\n" +
+            "\n" +
+            "# Kaplan-Meier 生存曲線をリスク群別に推定する(合成データ)。\n" +
+            "df = pd.read_csv('synthetic_survival.csv')\n" +
+            "kmf = KaplanMeierFitter()\n" +
+            "for grp, sub in df.groupby('risk_group'):\n" +
+            "    kmf.fit(sub['time'], sub['event'], label=grp)\n" +
+            "    print(grp, kmf.median_survival_time_)\n",
+        },
+        results: [
+          {
+            type: "text",
+            name: "群別 生存中央値(日)",
+            content:
+              "risk_group  median_survival_days\n" +
+              "low         420\n" +
+              "moderate    310\n" +
+              "high        185\n" +
+              "\n" +
+              "high 群で生存中央値が明らかに短い(185 日)。",
+          },
+        ],
+        report:
+          "リスク群間で生存中央値に差(low 420 / high 185 日)。" +
+          "ログランク検定を生データで実施したい。",
+      },
+    ];
+
+    // 仮想(プリセット)提出物の定義(#53)。alpine:init で store.seed() に渡し、
+    // 提出物一覧/審査が初回から空でないようにする(デモ成果物 = 架空 / in-memory)。
+    // 素材(program/results/report)は内蔵サンプル(DEMO_SUBMISSIONS, #52)を再利用し、
+    // 重複定義を避ける。preset ごとに analyst / submittedAt / 焦点(report 補足)を差し替え、
+    // status は submitted と approved を混在(approved は reviewedBy/reviewedAt を持つ)。
+    // id は "preset-<n>" で明示し、ユーザー提出の "sub-<n>" 採番(seq)と衝突させない。
+    // 結果配列の参照共有は store.seed() 側の浅いコピーで切り離す。
+    const PRESET_SUBMISSIONS = [
+      {
+        id: "preset-1",
+        datasetId: "prostate-psa",
+        program: DEMO_SUBMISSIONS[0].program, // clustering.py
+        results: DEMO_SUBMISSIONS[0].results,
+        report:
+          DEMO_SUBMISSIONS[0].report +
+          "(デモ用プリセット: PSA クラスタリングの初期所見)",
+        analyst: "クラスタ 花子",
+        status: "submitted",
+        submittedAt: "2026-05-12T09:30:00.000Z",
+      },
+      {
+        id: "preset-2",
+        datasetId: "prostate-psa",
+        program: DEMO_SUBMISSIONS[1].program, // dose_response.py
+        results: DEMO_SUBMISSIONS[1].results,
+        report:
+          DEMO_SUBMISSIONS[1].report +
+          "(デモ用プリセット: 用量反応・オーナー承認済み)",
+        analyst: "用量 一郎",
+        status: "approved",
+        submittedAt: "2026-05-08T14:05:00.000Z",
+        reviewedBy: "保田 オーナー",
+        reviewedAt: "2026-05-09T10:20:00.000Z",
+      },
+      {
+        id: "preset-3",
+        datasetId: "renal-marker",
+        program: DEMO_SUBMISSIONS[2].program, // survival_km.py
+        results: DEMO_SUBMISSIONS[2].results,
+        report:
+          DEMO_SUBMISSIONS[2].report +
+          "(デモ用プリセット: 腎マーカー別の生存比較)",
+        analyst: "生存 次郎",
+        status: "submitted",
+        submittedAt: "2026-05-10T11:45:00.000Z",
+      },
+    ];
+
     function submitForm() {
       const MAX_PROGRAM_BYTES = 512 * 1024; // プログラムテキスト上限 512KB
       const MAX_IMAGE_BYTES = 2 * 1024 * 1024; // 画像 dataURL の肥大化防止 2MB
       // 許可する画像 MIME(完全一致)。image/svg+xml はスクリプトを含みうるため除外する。
       const ALLOWED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"];
       return {
+        demoSeq: 0, // デモ用サンプル提出の巡回インデックス(#52)
         programName: "",
         programText: "",
         programBytes: 0,
@@ -1399,30 +1723,30 @@
           this.resultText = "";
           this.report = "";
         },
-      };
-    }
-
-    // 原理デモ面(カタログ外, #43, N4)。1 データセット(prostate-psa)で、同一分析の
-    // 合成データ結果(analyst フラグメント)と生データ結果(owner フラグメント)を並置する。
-    // フラグメントはデータセット非依存の canvas id(合成=chart-synthetic-<a> /
-    // 生=chart-raw-<a>)を別 id で持つため、並置しても衝突しない。Chart の二重描画は
-    // フラグメント側の Chart.getChart(el).destroy() で防ぐ(分析切替・再選択でも保たれる)。
-    function demoPage() {
-      return {
-        DATASET: "prostate-psa",
-        selected: null, // 選択中の分析
-        analyses: [
-          { id: "clustering", title: "PSA軌跡クラスタリング" },
-          { id: "association", title: "投薬–PSA反応の関連分析" },
-          { id: "survival", title: "進行イベントの生存時間分析" },
-        ],
-        // 合成・生の両フラグメントを同時に読み込む(本番では同一ジョブの 2 結果に相当)。
-        pick(analysis) {
-          this.selected = analysis;
-          htmx.ajax("GET", "fragments/" + this.DATASET + "/analyst/" +
-                    analysis + ".html", "#demo-synthetic");
-          htmx.ajax("GET", "fragments/" + this.DATASET + "/owner/" +
-                    analysis + ".html", "#demo-raw");
+        // デモ用ワンクリック提出(#52)。内蔵サンプル(DEMO_SUBMISSIONS)を巡回し、
+        // 手動提出と同じ submissions.add() 経路で 1 件保存する。要ログイン。
+        // analyst はクリック時のログインユーザー名。status は store が "submitted" を補完。
+        // プログラムは実行されず、表示・保管のみ(手動提出と同じ)。
+        submitDemo() {
+          this.error = "";
+          this.success = "";
+          if (!this.$store.session.isAuthed()) {
+            this.error = "提出にはログインが必要です。";
+            return;
+          }
+          const def = DEMO_SUBMISSIONS[this.demoSeq % DEMO_SUBMISSIONS.length];
+          this.demoSeq += 1;
+          const datasetId = this.$store.session.currentDatasetId;
+          // サンプル定義は共有しているため、結果配列は浅いコピーで渡す(参照共有を避ける)。
+          const saved = this.$store.submissions.add(datasetId, {
+            program: { name: def.program.name, text: def.program.text },
+            results: def.results.map((r) => ({ ...r })),
+            report: def.report,
+            analyst: this.$store.session.user?.name || "analyst",
+          });
+          this.success =
+            "デモ用サンプルを提出しました(" + saved.id + ": " +
+            def.program.name + ")。下の「紐づく提出物」に追加されました。";
         },
       };
     }

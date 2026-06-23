@@ -146,6 +146,10 @@ a.primary.download-link {
   text-decoration: none;
 }
 a.primary.download-link:hover { background: var(--brand-dark); }
+/* 合成データ CSV ダウンロード(#51): テーブル単位の小さなボタン群。 */
+.csv-note { margin-top: 14px; }
+.actions.csv-actions { margin-top: 8px; gap: 10px; }
+button.csv-link { font-size: .85rem; padding: 8px 14px; }
 button.ghost {
   background: transparent; border: 1px solid var(--brand); color: var(--brand);
   padding: 10px 16px; border-radius: 8px; cursor: pointer;
@@ -153,18 +157,12 @@ button.ghost {
 .hint { color: var(--muted); font-size: .9rem; }
 .hint a { color: var(--brand); }
 
-/* ---- analysis picker ---- */
-.analysis-picker { display: flex; gap: 8px; margin: 16px 0; flex-wrap: wrap; }
 .chip {
   border: 1px solid var(--line); background: #eef1f6; color: var(--ink);
   padding: 9px 14px; border-radius: 999px; cursor: pointer; font-size: .9rem;
 }
 .chip.sel { background: var(--brand); color: #fff; border-color: var(--brand); }
 
-.result-pane {
-  border: 1px dashed var(--line); border-radius: var(--radius); padding: 16px;
-  min-height: 80px; margin-top: 8px; background: #fcfdff;
-}
 .placeholder { color: var(--muted); font-style: italic; margin: 8px 0; }
 
 /* ---- fragment ---- */
@@ -194,11 +192,6 @@ button.ghost {
   overflow-x: auto; font-size: .82rem;
 }
 
-/* ---- review compare ---- */
-.compare { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0; }
-.col-head { margin: 0 0 8px; font-size: .95rem; padding: 6px 10px; border-radius: 8px; color: #fff; }
-.col-head.synthetic { background: var(--synthetic); }
-.col-head.raw { background: var(--raw); }
 .callout {
   background: #f3faf3; border: 1px solid #c5e1c5; border-radius: var(--radius);
   padding: 12px 14px; font-size: .9rem; margin: 6px 0 0;
@@ -240,6 +233,14 @@ button.ghost {
   padding: 12px 14px; font-size: .85rem; color: #6b5a30; margin: 0 0 18px; line-height: 1.55;
 }
 .register-disclaimer strong { color: #8a6d1f; }
+.reg-demo {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  flex-wrap: wrap; background: #eef4ff; border: 1px solid #cfe0ff;
+  border-radius: var(--radius); padding: 14px 16px; margin: 0 0 20px;
+}
+.reg-demo-text { flex: 1 1 280px; }
+.reg-demo-text strong { color: var(--brand); display: block; margin-bottom: 2px; }
+.reg-demo .frag-note { margin: 0; }
 .register-form { display: flex; flex-direction: column; gap: 16px; }
 .register-form input[type="text"],
 .register-form input[type="number"],
@@ -331,6 +332,12 @@ button.ghost {
 .submission-head { display: flex; align-items: center; gap: 12px; }
 .submission-head strong { flex: 1; }
 .submission-card .role-pill { background: #eef1f6; border: 1px solid var(--line); color: var(--muted); }
+/* デモ用プリセット提出物の目印(#53。架空成果物であることを示す小バッジ) */
+.preset-badge {
+  display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: .72rem;
+  font-weight: 700; letter-spacing: .04em; background: #fff4e5; border: 1px solid #f0c98a;
+  color: #9a6a16;
+}
 .submission-meta {
   display: flex; gap: 14px; flex-wrap: wrap; margin: 0; color: var(--muted); font-size: .85rem;
 }
@@ -390,6 +397,8 @@ button.ghost {
 .submit-upload .field { margin-top: 12px; }
 .submit-upload textarea { width: 100%; box-sizing: border-box; }
 .submit-upload input[type="file"] { margin-top: 4px; font-size: .9rem; }
+/* デモ用ワンクリック提出ボックス(#52)。手動提出 actions の下に置く。 */
+.submit-demo { margin: 16px 0 0; }
 .result-image-preview { margin: 8px 0 0; display: flex; align-items: center; gap: 10px; }
 .result-thumb {
   max-width: 220px; max-height: 160px; border: 1px solid var(--line);
@@ -398,15 +407,9 @@ button.ghost {
 /* 提出物カードの結果件数バッジ */
 .submission-results { color: var(--muted); font-size: .82rem; }
 
-/* 原理デモ面(カタログ外, #43, N4) */
-.demo-view { max-width: 1100px; margin: 0 auto; padding: 8px 0 24px; }
-.demo-head h2 { margin: 0 0 8px; }
-.demo-note { margin: 0 0 12px; }
-.demo-callout { margin-top: 16px; }
-
 .site-foot { text-align: center; color: var(--muted); font-size: .82rem; padding: 20px; }
 .site-foot a { color: var(--brand); }
 
 @media (max-width: 820px) {
-  .cards, .compare { grid-template-columns: 1fr; }
+  .cards { grid-template-columns: 1fr; }
 }

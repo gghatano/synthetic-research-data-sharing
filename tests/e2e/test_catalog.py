@@ -9,7 +9,7 @@ from __future__ import annotations
 import pytest
 from playwright.sync_api import Page, expect
 
-from .helpers import open_catalog, open_dataset
+from .helpers import open_catalog, open_dataset, open_register
 
 pytestmark = pytest.mark.e2e
 
@@ -74,8 +74,16 @@ def test_dataset_detail_shows_metadata_and_preview(page: Page, base_url: str) ->
 
 
 def test_dataset_submission_placeholder_empty(page: Page, base_url: str) -> None:
-    """紐づく提出物の枠が空状態(プレースホルダ)で表示される(#23 では常に空)。"""
-    open_dataset(page, base_url, "prostate-psa")
+    """提出物が無いデータセットでは空状態(プレースホルダ)が表示される。
+
+    #53 でバンドル済みデータ(prostate-psa / renal-marker)にはデモ用プリセット
+    提出物が初期投入されるため、空状態は新規登録した user データセットで確認する。
+    """
+    open_register(page, base_url)
+    # デモ用データを 1 件登録すると、その個別ページへ自動遷移する(#55)。
+    # user-<n> データセットはプリセット対象外なので提出物はまだ無い。
+    page.get_by_test_id("reg-demo-register").click()
+    page.wait_for_selector("[data-testid='dataset-view']", state="visible")
 
     submissions = page.get_by_test_id("dataset-submissions")
     expect(submissions).to_be_visible()
@@ -84,9 +92,9 @@ def test_dataset_submission_placeholder_empty(page: Page, base_url: str) -> None
     assert page.get_by_test_id("submission-card").count() == 0
 
     # 枠は dataset_id を data 属性に持つ(#25 の書き込み先キー設計の確認)。
-    expect(page.get_by_test_id("submission-list")).to_have_attribute(
-        "data-dataset-id", "prostate-psa"
-    )
+    # 登録した user データセットの id(user-<n>)が入る。
+    dataset_id = page.get_by_test_id("submission-list").get_attribute("data-dataset-id")
+    assert dataset_id is not None and dataset_id.startswith("user-")
 
 
 def test_dataset_back_to_catalog(page: Page, base_url: str) -> None:
