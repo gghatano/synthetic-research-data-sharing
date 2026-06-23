@@ -9,6 +9,8 @@ owner 限定の登録フォーム → カタログ一覧への即時反映 / ana
 
 from __future__ import annotations
 
+import re
+
 import pytest
 from playwright.sync_api import Page, expect
 
@@ -48,46 +50,62 @@ def test_register_sample_reflects_in_catalog(page: Page, base_url: str) -> None:
     expect(page.locator("[data-testid='catalog-card']", has_text=title)).to_be_visible()
 
 
-def test_register_demo_one_click(page: Page, base_url: str) -> None:
-    """owner がデモボタンを押すと、デモデータセットが登録され個別ページが開く(#55)。"""
+def test_register_demo_fills_form_without_registering(page: Page, base_url: str) -> None:
+    """デモボタンはフォームを記入するだけ。登録も遷移もしない(#62)。"""
     open_register(page, base_url)
     demo = page.get_by_test_id("reg-demo-register")
     expect(demo).to_be_visible()
 
-    # ワンクリック登録 → 直後に新規データセットの個別ページへ遷移する。
-    demo.click()
-    page.wait_for_selector("[data-testid='dataset-view']", state="visible")
-    title = page.get_by_test_id("dataset-title")
-    expect(title).to_be_visible()
-    expect(title).to_contain_text("デモ")
-    # ユーザー登録分なので合成データ DL は出ない(user-* は synthetic 未生成)。
-    expect(page.get_by_test_id("download-synthetic")).to_be_hidden()
+    # クリック前は未登録(空)状態。
+    expect(page.get_by_test_id("reg-registered-empty")).to_be_visible()
 
-    # カタログ一覧にも反映される(先頭に出る)。
-    page.get_by_test_id("nav-explore").click()
-    page.wait_for_selector("[data-testid='catalog-card']", state="visible")
-    expect(page.locator("[data-testid='catalog-card']", has_text="デモ").first).to_be_visible()
+    # クリック → フォームが架空デモデータで埋まる(登録・遷移はしない)。
+    demo.click()
+
+    # register ビューに留まる(個別ページへ遷移しない)。
+    expect(page.get_by_test_id("register-view")).to_be_visible()
+    expect(page.get_by_test_id("dataset-view")).to_be_hidden()
+
+    # メタデータ各フィールドが記入されている。
+    expect(page.get_by_test_id("reg-title")).not_to_have_value("")
+    expect(page.get_by_test_id("reg-title")).to_have_value(re.compile("デモ"))
+    expect(page.get_by_test_id("reg-description")).not_to_have_value("")
+    expect(page.get_by_test_id("reg-domain")).not_to_have_value("")
+    # データ源が submit-ready: source=sample かつ有効なサンプルが選択済み。
+    expect(page.get_by_test_id("reg-source-sample")).to_be_checked()
+    expect(page.get_by_test_id("reg-sample-select")).not_to_have_value("")
+
+    # まだ登録は発生していない(登録済みリストは空のまま)。
+    expect(page.get_by_test_id("reg-registered-empty")).to_be_visible()
+    expect(page.locator("[data-testid='reg-item']")).to_have_count(0)
+
+    # ユーザーが reg-submit を押して初めて登録される。
+    page.get_by_test_id("reg-submit").click()
+    expect(page.get_by_test_id("reg-success")).to_be_visible()
+    expect(page.locator("[data-testid='reg-item']")).to_have_count(1)
+    expect(page.locator("[data-testid='reg-item']", has_text="デモ")).to_be_visible()
+    # 登録後も自動遷移はせず register ビューに留まる(ナビはユーザーに委ねる)。
+    expect(page.get_by_test_id("register-view")).to_be_visible()
+    expect(page.get_by_test_id("dataset-view")).to_be_hidden()
 
 
 def test_register_demo_cycles_definitions(page: Page, base_url: str) -> None:
-    """デモボタンを連続クリックすると別々のデモデータセットが登録される(巡回, #55)。"""
+    """デモボタンを連続クリックすると別々の定義でフォームを埋める(巡回, #62)。"""
     open_register(page, base_url)
-    page.get_by_test_id("reg-demo-register").click()
-    page.wait_for_selector("[data-testid='dataset-view']", state="visible")
-    first = page.get_by_test_id("dataset-title").inner_text()
+    demo = page.get_by_test_id("reg-demo-register")
 
-    # register ビューへ戻って 2 回目のクリック → 別タイトルが登録される。
-    page.get_by_test_id("nav-register").click()
-    page.wait_for_selector("[data-testid='register-view']", state="visible")
-    page.get_by_test_id("reg-demo-register").click()
-    page.wait_for_selector("[data-testid='dataset-view']", state="visible")
-    second = page.get_by_test_id("dataset-title").inner_text()
+    demo.click()
+    first = page.get_by_test_id("reg-title").input_value()
+    assert first  # 1 回目で記入される。
+
+    # 2 回目のクリック → 別タイトルでフォームが上書きされる(登録はしない)。
+    demo.click()
+    second = page.get_by_test_id("reg-title").input_value()
+    assert second
     assert first != second
-
-    # 登録済みは 2 件。
-    page.get_by_test_id("nav-register").click()
-    page.wait_for_selector("[data-testid='register-view']", state="visible")
-    expect(page.locator("[data-testid='reg-item']")).to_have_count(2)
+    # 巡回中は一度も登録されない。
+    expect(page.get_by_test_id("reg-registered-empty")).to_be_visible()
+    expect(page.locator("[data-testid='reg-item']")).to_have_count(0)
 
 
 def test_register_required_validation(page: Page, base_url: str) -> None:
