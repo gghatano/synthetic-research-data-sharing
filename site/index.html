@@ -196,7 +196,35 @@
           s.reviewedAt = new Date().toISOString();
           return s;
         },
+        // 仮想(プリセット)提出物の初期配置(#53)。提出物一覧/審査が初回から空でない
+        // ようにデモ用の架空提出物を 1 度だけ流し込む。各 preset は明示 id("preset-<n>")
+        // を持つため "sub-<n>" 採番(seq)とは衝突しない(seq はユーザー提出のみ進む)。
+        // 冪等: 同じ id を二重に入れない(複数ビューからの初期化や HMR 的再評価に備える)。
+        // in-memory のためハードリロードでリセット(localStorage 不使用 = 既存デモと同思想)。
+        seeded: false, // seed 実行済みフラグ(冪等性)
+        seed(presets) {
+          if (this.seeded) return;
+          this.seeded = true;
+          for (const p of presets || []) {
+            if (!this.byDataset[p.datasetId]) this.byDataset[p.datasetId] = [];
+            // 念のため同一 id の重複を避ける(冪等)。
+            if (this.byDataset[p.datasetId].some((s) => s.id === p.id)) continue;
+            this.byDataset[p.datasetId].push({
+              ...p,
+              // 結果配列は共有定義由来のため浅いコピーで実体を分ける(参照共有を避ける)。
+              results: (p.results || []).map((r) => ({ ...r })),
+              isPreset: true, // デモ成果物であることの目印(UI バッジ用)
+            });
+          }
+        },
       });
+
+      // 仮想(プリセット)提出物を初期配置する(#53)。store 定義後に 1 度だけ流し込み、
+      // 提出→審査フローを初回から体験できるようにする。プログラム/結果/レポートの素材は
+      // 既存の内蔵サンプル(DEMO_SUBMISSIONS, #52)を再利用し、analyst 名・提出時刻・
+      // 分析の焦点だけ preset ごとに差し替える。status は submitted/approved を混在させ、
+      // 一覧・詳細で状態差が見えるようにする(approved は reviewedBy/reviewedAt を持つ)。
+      Alpine.store("submissions").seed(PRESET_SUBMISSIONS);
     });
   </script>
 </head>
@@ -816,6 +844,9 @@
                   <div class="submission-head">
                     <strong data-testid="submission-program"
                             x-text="s.program?.name || 'program'"></strong>
+                    <!-- デモ用プリセット(#53)であることの目印(架空成果物)。 -->
+                    <span class="preset-badge" data-testid="submission-preset-badge"
+                          x-show="s.isPreset" x-cloak>デモ</span>
                     <span class="role-pill" data-testid="submission-status"
                           :class="{ approved: s.status === 'approved' }"
                           x-text="s.status"></span>
@@ -1512,6 +1543,54 @@
         report:
           "リスク群間で生存中央値に差(low 420 / high 185 日)。" +
           "ログランク検定を生データで実施したい。",
+      },
+    ];
+
+    // 仮想(プリセット)提出物の定義(#53)。alpine:init で store.seed() に渡し、
+    // 提出物一覧/審査が初回から空でないようにする(デモ成果物 = 架空 / in-memory)。
+    // 素材(program/results/report)は内蔵サンプル(DEMO_SUBMISSIONS, #52)を再利用し、
+    // 重複定義を避ける。preset ごとに analyst / submittedAt / 焦点(report 補足)を差し替え、
+    // status は submitted と approved を混在(approved は reviewedBy/reviewedAt を持つ)。
+    // id は "preset-<n>" で明示し、ユーザー提出の "sub-<n>" 採番(seq)と衝突させない。
+    // 結果配列の参照共有は store.seed() 側の浅いコピーで切り離す。
+    const PRESET_SUBMISSIONS = [
+      {
+        id: "preset-1",
+        datasetId: "prostate-psa",
+        program: DEMO_SUBMISSIONS[0].program, // clustering.py
+        results: DEMO_SUBMISSIONS[0].results,
+        report:
+          DEMO_SUBMISSIONS[0].report +
+          "(デモ用プリセット: PSA クラスタリングの初期所見)",
+        analyst: "クラスタ 花子",
+        status: "submitted",
+        submittedAt: "2026-05-12T09:30:00.000Z",
+      },
+      {
+        id: "preset-2",
+        datasetId: "prostate-psa",
+        program: DEMO_SUBMISSIONS[1].program, // dose_response.py
+        results: DEMO_SUBMISSIONS[1].results,
+        report:
+          DEMO_SUBMISSIONS[1].report +
+          "(デモ用プリセット: 用量反応・オーナー承認済み)",
+        analyst: "用量 一郎",
+        status: "approved",
+        submittedAt: "2026-05-08T14:05:00.000Z",
+        reviewedBy: "保田 オーナー",
+        reviewedAt: "2026-05-09T10:20:00.000Z",
+      },
+      {
+        id: "preset-3",
+        datasetId: "renal-marker",
+        program: DEMO_SUBMISSIONS[2].program, // survival_km.py
+        results: DEMO_SUBMISSIONS[2].results,
+        report:
+          DEMO_SUBMISSIONS[2].report +
+          "(デモ用プリセット: 腎マーカー別の生存比較)",
+        analyst: "生存 次郎",
+        status: "submitted",
+        submittedAt: "2026-05-10T11:45:00.000Z",
       },
     ];
 
