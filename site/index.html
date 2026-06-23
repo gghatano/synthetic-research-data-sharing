@@ -131,22 +131,43 @@
         },
       });
 
-      // 提出物の共有ストア(枠のみ。実紐付けは PF-5 #25 / 審査は #26)。
+      // 提出物の共有ストア(#25 が実紐付け / #26 が審査で読む)。
       // キー設計: submissions.byDataset[dataset_id] = 提出物配列(in-memory)。
-      //   各提出物の想定形(将来 #25 が書き込む): {
-      //     id, datasetId, analysis, analyst, status, submittedAt, ...
-      //   }
+      //   Submission スキーマ(#26 が読む前提の確定形):
+      //     {
+      //       id: string,            // 一意 ID ("sub-<seq>")
+      //       datasetId: string,     // 対象データセット(= catalog.json の dataset_id)
+      //       analysis: string,      // 分析種別 ("clustering" | "association" | "survival")
+      //       analysisTitle: string, // 分析の表示名
+      //       analyst: string,       // 提出者(ログイン中の analyst 名)
+      //       report: string,        // レポート(所見/メモのテキスト)
+      //       codeExcerpt: string,   // 提出した分析の適用コード抜粋(フラグメント由来)
+      //       status: string,        // "submitted"(初期値。審査で遷移するのは #26)
+      //       submittedAt: string,   // ISO8601 文字列
+      //     }
       //   dataset_id を起点キーにするのは catalog.json / パス規約と一致させるため。
-      // ここ(#23)では読み取り専用で空状態の枠を描画する。
+      //   localStorage 不使用(ハードリロードでリセット = 既存デモと同じ思想)。
       Alpine.store("submissions", {
         byDataset: {}, // { [dataset_id]: Submission[] }
+        seq: 0, // sub-<n> 採番カウンタ
         forDataset(datasetId) {
           return this.byDataset[datasetId] || [];
         },
-        // #25 が呼ぶ想定の API(ここでは未使用のシンプルな足場)。
+        // 提出物を 1 件追加し、採番した id を含む保存済みオブジェクトを返す。
+        // 呼び出し側は analysis/analyst/report/codeExcerpt 等を渡す。id/status/
+        // submittedAt は未指定ならここで補完する(#26 の審査は status を後から書き換える)。
         add(datasetId, submission) {
           if (!this.byDataset[datasetId]) this.byDataset[datasetId] = [];
-          this.byDataset[datasetId].push(submission);
+          this.seq += 1;
+          const saved = {
+            id: submission.id || "sub-" + this.seq,
+            datasetId,
+            status: submission.status || "submitted",
+            submittedAt: submission.submittedAt || new Date().toISOString(),
+            ...submission,
+          };
+          this.byDataset[datasetId].push(saved);
+          return saved;
         },
       });
     });
@@ -692,6 +713,45 @@
                     提出済み: <strong x-text="titleOf(submitted)"></strong> →
                     <a href="#" @click.prevent="enterReview()">審査タブへ</a></span>
                 </div>
+
+                <!--
+                  提出物の登録(#25)。選んだ分析(プログラム相当 = どの分析 + 適用コード抜粋)に
+                  レポート(所見/メモ)を添えて、このデータセットに紐づく提出物として保存する。
+                  保存先は共有ストア submissions.byDataset[dataset_id](#26 の審査が読む)。
+                  提出は要ログイン(analyst 想定)。未ログインなら導線を案内する。
+                -->
+                <div class="submit-block" data-testid="submit-block"
+                     x-show="loaded" x-cloak>
+                  <h3>提出物として登録する</h3>
+                  <p class="frag-note">選択中の分析
+                    (<strong x-text="titleOf(selected)"></strong>)を、所見/メモを添えて
+                    このデータセットに紐づく提出物として登録します。プログラム本体は
+                    <strong>選んだ分析＋適用コード抜粋</strong>として記録されます。</p>
+
+                  <label class="field">
+                    <span class="login-label">レポート(所見・メモ) <span class="req">*</span></span>
+                    <textarea data-testid="submit-report" x-model="report" rows="4"
+                      placeholder="例: responder クラスタが過半数。ADT 用量と PSA 低下率に弱い正の関連。生データでの再現性を確認したい。"></textarea>
+                  </label>
+
+                  <p class="login-error" data-testid="submit-error"
+                     x-show="submitError" x-cloak x-text="submitError"></p>
+                  <p class="reg-ok" data-testid="submit-success"
+                     x-show="submitSuccess" x-cloak x-text="submitSuccess"></p>
+
+                  <div class="actions">
+                    <button class="primary" data-testid="submit-to-dataset"
+                            @click="submitToDataset()"
+                            :disabled="!$store.session.isAuthed()"
+                            :title="!$store.session.isAuthed()
+                              ? 'ログインすると提出できます' : ''">
+                      提出物としてデータセットに登録する</button>
+                    <span class="submit-hint" data-testid="submit-need-login"
+                          x-show="!$store.session.isAuthed()" x-cloak>
+                      提出にはログインが必要です。
+                      <a href="#" @click.prevent="$store.session.go('login')">ログインへ</a></span>
+                  </div>
+                </div>
               </section>
 
               <!-- ======================= ③ オーナー：審査 ======================= -->
@@ -730,11 +790,12 @@
             </template>
           </section>
 
-          <!-- 紐づく提出物一覧(枠のみ。PF-5 #25 が書き込む) -->
+          <!-- 紐づく提出物一覧(#25 が書き込む。審査での status 遷移は #26)。 -->
           <section class="dataset-section" data-testid="dataset-submissions">
             <h3>紐づく提出物</h3>
-            <p class="frag-note">このデータセットに対して提出された分析の一覧です
-              (提出・審査機能は後続 Issue PF-5 / PF-6 で実装)。</p>
+            <p class="frag-note">このデータセットの<strong>合成データ</strong>に対して
+              提出された分析＋レポートの一覧です。分析ワークベンチから提出すると
+              ここに追加されます(審査機能は後続 Issue PF-6 で実装)。</p>
             <div class="submission-list"
                  data-testid="submission-list"
                  :data-dataset-id="dataset.dataset_id">
@@ -742,9 +803,24 @@
                  x-show="submissions().length === 0">
                 まだ提出物はありません。</p>
               <template x-for="(s, i) in submissions()" :key="s.id || i">
-                <div class="card submission-card" data-testid="submission-card">
-                  <strong x-text="s.analysis"></strong>
-                  <span class="role-pill" x-text="s.status"></span>
+                <div class="card submission-card" data-testid="submission-card"
+                     :data-submission-id="s.id" :data-analysis="s.analysis">
+                  <div class="submission-head">
+                    <strong x-text="s.analysisTitle || s.analysis"></strong>
+                    <span class="role-pill" data-testid="submission-status"
+                          x-text="s.status"></span>
+                  </div>
+                  <p class="submission-meta">
+                    <span class="catalog-owner">👤 <span x-text="s.analyst"></span></span>
+                    <span class="submission-when"
+                          x-text="new Date(s.submittedAt).toLocaleString('ja-JP')"></span>
+                  </p>
+                  <p class="submission-report" data-testid="submission-report"
+                     x-text="s.report"></p>
+                  <details class="frag-code" x-show="s.codeExcerpt" x-cloak>
+                    <summary>適用された分析コード(抜粋)</summary>
+                    <pre><code x-text="s.codeExcerpt"></code></pre>
+                  </details>
                 </div>
               </template>
             </div>
@@ -1039,6 +1115,9 @@
         selected: null,         // 分析者が選択中の分析
         submitted: null,        // 提出した分析
         loaded: false,          // フラグメント読込済みか
+        report: "",             // 提出レポート(所見/メモ, #25)
+        submitError: "",        // 提出物登録のバリデーションエラー
+        submitSuccess: "",      // 提出物登録の成功メッセージ
         // フラグメント/データのパス基底(= dataset_id)。共有ストアの選択中データセットに追従。
         get fragBase() {
           return this.$store.session.currentDatasetId || "prostate-psa";
@@ -1061,6 +1140,9 @@
         pick(analysis) {
           this.selected = analysis;
           this.loaded = false;
+          // 分析を切り替えたら提出フォームの状態(レポート/メッセージ)を初期化する。
+          this.submitSuccess = "";
+          this.submitError = "";
           // 合成データ結果フラグメントを #analyst-result に読み込む。
           // 完了は #analyst-result の @htmx:after-swap が loaded=true にする。
           htmx.ajax("GET", "fragments/" + this.fragBase + "/analyst/" +
@@ -1070,6 +1152,44 @@
           if (!this.loaded) return;
           this.submitted = this.selected;
           if (this.phaseRank() < 2) this.phase = "submitted";
+        },
+        // 読み込み済みフラグメントから適用コード抜粋(details.frag-code の <code>)を取り出す。
+        // プログラム相当の記録として提出物に含める(自由記述コードの実行はしない)。
+        extractCodeExcerpt() {
+          const el = document.querySelector("#analyst-result details.frag-code code");
+          return el ? el.textContent.trim() : "";
+        },
+        // 選んだ分析 + レポートを、このデータセットに紐づく提出物として共有ストアへ登録する(#25)。
+        // 要ログイン(analyst 想定)。dataset_id は共有ストアの選択中データセットを起点にする。
+        submitToDataset() {
+          this.submitError = "";
+          this.submitSuccess = "";
+          if (!this.$store.session.isAuthed()) {
+            this.submitError = "提出にはログインが必要です。";
+            return;
+          }
+          if (!this.loaded || !this.selected) {
+            this.submitError = "先に分析を選んで実行してください。";
+            return;
+          }
+          if (!this.report.trim()) {
+            this.submitError = "レポート(所見・メモ)を入力してください。";
+            return;
+          }
+          const datasetId = this.fragBase;
+          const saved = this.$store.submissions.add(datasetId, {
+            analysis: this.selected,
+            analysisTitle: this.titleOf(this.selected),
+            analyst: this.$store.session.user?.name || "analyst",
+            report: this.report.trim(),
+            codeExcerpt: this.extractCodeExcerpt(),
+          });
+          // ワークフロー状態としても「提出済み」に進める(既存ステッパー/審査導線と整合)。
+          this.submitted = this.selected;
+          if (this.phaseRank() < 2) this.phase = "submitted";
+          this.submitSuccess =
+            "提出しました(" + saved.id + ")。下の「紐づく提出物」に追加されました。";
+          this.report = "";
         },
         enterReview() {
           if (this.phaseRank() < 2) return;

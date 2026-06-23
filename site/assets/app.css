@@ -319,9 +319,25 @@ button.ghost {
 .table-scroll { overflow-x: auto; }
 .submission-list { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
 .submission-card {
-  display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: #fbfcfe;
+  display: flex; flex-direction: column; gap: 6px; padding: 12px 16px; background: #fbfcfe;
 }
+.submission-head { display: flex; align-items: center; gap: 12px; }
+.submission-head strong { flex: 1; }
 .submission-card .role-pill { background: #eef1f6; border: 1px solid var(--line); color: var(--muted); }
+.submission-meta {
+  display: flex; gap: 14px; flex-wrap: wrap; margin: 0; color: var(--muted); font-size: .85rem;
+}
+.submission-report { margin: 4px 0 0; white-space: pre-wrap; }
+
+/* 提出物の登録ブロック(分析ワークベンチ内, #25) */
+.submit-block {
+  margin-top: 18px; padding: 16px; border: 1px solid var(--line); border-radius: 10px;
+  background: #fbfcfe;
+}
+.submit-block h3 { margin: 0 0 6px; }
+.submit-block textarea { width: 100%; box-sizing: border-box; }
+.submit-hint { color: var(--muted); font-size: .9rem; }
+.submit-hint a { color: var(--brand); }
 
 .site-foot { text-align: center; color: var(--muted); font-size: .82rem; padding: 20px; }
 .site-foot a { color: var(--brand); }
