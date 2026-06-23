@@ -2,8 +2,8 @@
 blank_issues_enabled: false
 contact_links:
   - name: 仕様書 (docs/SPEC.md)
-    url: https://github.com/gghatano/synthetic-research-data-sharing/blob/main/docs/SPEC.md
+    url: https://github.com/gghatano/synthetic-research-data-sharing/blob/develop/docs/SPEC.md
     about: 実装の唯一の正。Issue を立てる前に該当節を確認してください。
   - name: Issue 運用ガイド
-    url: https://github.com/gghatano/synthetic-research-data-sharing/blob/main/docs/issue-management.md
+    url: https://github.com/gghatano/synthetic-research-data-sharing/blob/develop/docs/issue-management.md
     about: Issue 駆動開発のフロー・粒度・worktree 運用。

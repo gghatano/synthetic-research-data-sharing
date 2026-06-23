@@ -1,0 +1,729 @@
+その運用設計なら、かなり良いです。
+前回の「仕様書 → 実装計画 → サブエージェント → レビュー」より、さらに一段実務向きにするなら、**GitHub Issueを唯一の作業単位・進捗記録・レビュー証跡にする**形が適しています。
+
+特に、以下の設計がよいです。
+
+```text
+仕様書
+  ↓
+Issue分割
+  ↓
+Issueごとに branch / worktree 作成
+  ↓
+Claude Codeが該当Issueを読む
+  ↓
+サブエージェントが実装・テスト・レビュー
+  ↓
+PR作成
+  ↓
+Issueへ進捗・検証結果・残課題をコメント
+  ↓
+Issue close
+```
+
+Claude Code公式ドキュメントでも、worktreeは独立した作業ディレクトリとブランチを持たせ、複数のClaude Codeセッションを分離して進める用途に適すると説明されています。GitHub CLIも `gh issue create`、`gh issue view`、`gh issue develop` などでIssueとブランチの連携を扱えます。([Claude Code][1])
+
+---
+
+## 追加すべき運用コンセプト
+
+ここで重要なのは、**Issueを単なるToDoではなく、Claude Codeへの作業指示書にする**ことです。
+
+Issueには最低限、以下を入れるべきです。
+
+```text
+- 背景
+- 対象仕様
+- 実装スコープ
+- 非スコープ
+- 変更想定箇所
+- 完了条件
+- 検証方法
+- 関連Issue
+- 既知のリスク
+- Claude Codeへの作業指示
+```
+
+逆に、Issueに入れるべきでないものは以下です。
+
+```text
+- 大きすぎる機能全体
+- 未確定の設計論点
+- 他Issueに依存する作業を暗黙に含むもの
+- 「よしなに改善」系の指示
+- テスト方法が定義できないタスク
+```
+
+Issue 1件の粒度は、**1つのPRで完結し、レビュー可能で、失敗時に切り戻せる単位**が適切です。
+
+---
+
+## リポジトリに整備させるべき追加ファイル
+
+前回案に加えて、Issue / worktree前提なら以下を追加した方がよいです。
+
+```text
+.github/
+  ISSUE_TEMPLATE/
+    implementation-task.yml
+    bugfix-task.yml
+    refactor-task.yml
+    investigation-task.yml
+
+.claude/
+  skills/
+    issue-driven-development/
+      SKILL.md
+    issue-triage/
+      SKILL.md
+    worktree-task-runner/
+      SKILL.md
+    pr-from-issue/
+      SKILL.md
+
+docs/
+  issue-management.md
+  branch-worktree-policy.md
+  task-granularity-guide.md
+```
+
+この構成にすると、Claude Codeに「Issueを読んで作業する」前提を強制できます。
+
+---
+
+## Claude Codeへの初回指示案：Issue駆動版
+
+そのまま貼るなら、以下です。
+
+```text
+このリポジトリでは、GitHub Issueを計画管理・進行記録・作業指示の単位として利用します。
+各実装タスクはGitHub Issueとして作成し、Issueごとに専用branchおよびgit worktreeを作成して作業します。
+
+あなたには、仕様書に基づく実装を進める前に、Issue駆動・worktree分離・サブエージェント活用を前提とした開発運用の足場を整備してもらいます。
+
+直ちに実装に着手しないでください。
+まず、以下を実施してください。
+
+1. リポジトリ全体を確認してください。
+   - 仕様書の所在
+   - 技術スタック
+   - ディレクトリ構成
+   - 既存実装
+   - テスト、lint、format、typecheck、build、起動方法
+   - CIの有無
+   - GitHub Issue運用に必要な前提
+   - worktree運用時の注意点
+
+2. Issue駆動開発に必要な運用資産を作成・更新してください。
+   必要に応じて、以下を作成してください。
+
+   - CLAUDE.md
+   - .claude/skills/issue-driven-development/SKILL.md
+   - .claude/skills/issue-triage/SKILL.md
+   - .claude/skills/worktree-task-runner/SKILL.md
+   - .claude/skills/pr-from-issue/SKILL.md
+   - .claude/agents/spec-analyst.md
+   - .claude/agents/issue-planner.md
+   - .claude/agents/implementation-agent.md
+   - .claude/agents/test-engineer.md
+   - .claude/agents/code-reviewer.md
+   - .claude/agents/security-reviewer.md
+   - docs/issue-management.md
+   - docs/branch-worktree-policy.md
+   - docs/task-granularity-guide.md
+   - docs/review-checklist.md
+   - docs/acceptance-criteria.md
+   - .github/ISSUE_TEMPLATE/implementation-task.yml
+   - .github/ISSUE_TEMPLATE/bugfix-task.yml
+   - .github/ISSUE_TEMPLATE/refactor-task.yml
+   - .github/ISSUE_TEMPLATE/investigation-task.yml
+
+3. CLAUDE.mdには、毎回参照すべき最小限のルールを記載してください。
+   特に以下を明記してください。
+
+   - 作業は原則としてGitHub Issue単位で行う
+   - Issue未作成の実装に着手しない
+   - Issueごとに専用branchを作成する
+   - Issueごとに専用git worktreeを作成する
+   - 作業開始時にIssue本文とコメントを必ず読む
+   - Issueに記載されたスコープを超える変更をしない
+   - スコープ外の発見事項は、実装せずIssueコメントまたは別Issue候補として記録する
+   - 作業完了時はIssueへ検証結果・変更概要・残課題をコメントする
+   - PR本文にはIssue番号、変更内容、検証結果、レビュー観点を記載する
+   - PR作成後、関連IssueにPRリンクを残す
+   - 仕様上の曖昧点がある場合は、仮定をIssueに明記する
+
+4. GitHub Issueのテンプレートを作成してください。
+   implementation-task.ymlには、最低限以下の項目を含めてください。
+
+   - 背景
+   - 対象仕様
+   - 実装スコープ
+   - 非スコープ
+   - 変更想定箇所
+   - 完了条件
+   - 検証方法
+   - 関連Issue
+   - 既知のリスク
+   - Claude Codeへの作業指示
+
+5. Issueの粒度ガイドを作成してください。
+   1 Issueは、原則として以下を満たす単位にしてください。
+
+   - 1つのPRで完結する
+   - 変更対象が過度に広くない
+   - 完了条件が明確である
+   - テストまたは代替検証が可能である
+   - 他Issueへの依存関係が明示されている
+   - 失敗時に切り戻しやすい
+
+6. サブエージェントを定義してください。
+   最低限、以下の役割を作成してください。
+
+   - spec-analyst：仕様書を読み、Issue化すべきタスクを抽出する
+   - issue-planner：タスク粒度、依存関係、Issue本文を設計する
+   - implementation-agent：Issue本文に基づいて実装する
+   - test-engineer：テスト設計、テスト追加、失敗原因分析を行う
+   - code-reviewer：実装差分をレビューする
+   - security-reviewer：セキュリティ観点でレビューする
+
+7. サブエージェントには必要最小限の権限を設定してください。
+   - spec-analyst、issue-planner、code-reviewer、security-reviewerは原則として読み取り中心
+   - implementation-agent、test-engineerのみ編集権限を持つ
+   - レビュー系エージェントは勝手に修正せず、指摘事項を返す
+
+8. worktree運用ルールを作成してください。
+   以下を標準ルールにしてください。
+
+   - branch名は issue/{issue-number}-{short-slug} とする
+   - worktreeパスは ../worktrees/{repo-name}-issue-{issue-number} とする
+   - 1 worktree = 1 issue = 1 branch とする
+   - 複数Issueを同一worktreeで扱わない
+   - main / develop 直下では実装しない
+   - 作業完了後はPR作成後にworktree削除候補とする
+
+9. GitHub CLIを利用できる場合は、Issueとbranch/worktreeを紐づけるコマンド例をdocs/branch-worktree-policy.mdに記載してください。
+   例：
+   - gh issue view
+   - gh issue create
+   - gh issue develop
+   - git worktree add
+   - gh pr create
+   - gh issue comment
+   - gh issue close
+
+10. 上記の整備が完了したら、仕様書を読み、実装タスク候補をIssue化する計画を作成してください。
+    ただし、まだ大量のIssueを自動作成しないでください。
+    まず、Issue候補一覧をdocs/implementation-plan.mdに作成してください。
+
+11. docs/implementation-plan.mdには以下を記載してください。
+
+    - Issue候補タイトル
+    - 背景
+    - 実装スコープ
+    - 非スコープ
+    - 依存関係
+    - 優先度
+    - 想定変更箇所
+    - 検証方法
+    - 推奨ラベル
+    - 推奨担当サブエージェント
+    - 想定PR粒度
+
+12. 最後に、以下を報告してください。
+
+    - 作成・更新した運用資産
+    - Issue駆動開発フロー
+    - サブエージェント構成
+    - worktree運用ルール
+    - Issue候補一覧
+    - 実装開始前に確認すべき論点
+
+重要：
+- 実装前に、Issue駆動・worktree分離・レビュー運用の足場を完成させてください。
+- Issue本文にない作業を勝手に実装しないでください。
+- スコープ外の発見事項はIssueコメントまたは別Issue候補として記録してください。
+- 仕様が曖昧な場合は、実装判断の仮定をIssueに明記してください。
+- 作業完了時は、必ずIssueとPRの双方に検証結果を残してください。
+```
+
+---
+
+## Issueテンプレート案
+
+`.github/ISSUE_TEMPLATE/implementation-task.yml` はこのくらいの粒度がよいです。
+
+```yaml
+name: Implementation Task
+description: 仕様に基づく実装タスク
+title: "[Task] "
+labels: ["type:implementation", "status:ready"]
+body:
+  - type: textarea
+    id: background
+    attributes:
+      label: 背景
+      description: なぜこのタスクが必要か
+      placeholder: |
+        仕様書の該当箇所、ユーザー価値、前提となる実装状況を記載する。
+    validations:
+      required: true
+
+  - type: textarea
+    id: spec
+    attributes:
+      label: 対象仕様
+      description: 仕様書の該当箇所、要件、制約
+      placeholder: |
+        - 仕様書: docs/spec.md
+        - 該当セクション:
+        - 要件:
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: 実装スコープ
+      description: このIssueで実装すること
+      placeholder: |
+        - 
+    validations:
+      required: true
+
+  - type: textarea
+    id: non_scope
+    attributes:
+      label: 非スコープ
+      description: このIssueでは実装しないこと
+      placeholder: |
+        - 
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected_changes
+    attributes:
+      label: 変更想定箇所
+      description: 変更が想定されるファイル・ディレクトリ
+      placeholder: |
+        - src/...
+        - tests/...
+    validations:
+      required: false
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 完了条件
+      description: このIssueを完了と判断する条件
+      placeholder: |
+        - [ ] 対象仕様を満たしている
+        - [ ] テストが追加・更新されている
+        - [ ] lintが成功する
+        - [ ] typecheckが成功する
+        - [ ] 既存テストが成功する
+    validations:
+      required: true
+
+  - type: textarea
+    id: verification
+    attributes:
+      label: 検証方法
+      description: 実行すべきコマンド、確認観点
+      placeholder: |
+        - npm test
+        - npm run lint
+        - npm run typecheck
+    validations:
+      required: true
+
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: 依存Issue
+      description: 先に完了している必要があるIssue
+      placeholder: |
+        - depends on #
+    validations:
+      required: false
+
+  - type: textarea
+    id: risks
+    attributes:
+      label: 既知のリスク・注意点
+      description: 実装時に注意すべき点
+      placeholder: |
+        - 
+    validations:
+      required: false
+
+  - type: textarea
+    id: claude_instruction
+    attributes:
+      label: Claude Codeへの作業指示
+      description: Claude CodeがこのIssueを読む前提の具体的な作業指示
+      placeholder: |
+        このIssueのスコープに限定して実装してください。
+        作業開始時に対象仕様と既存実装を確認してください。
+        実装後、検証コマンドを実行し、結果をIssueコメントに記録してください。
+    validations:
+      required: true
+```
+
+---
+
+## Issue作成時の粒度ルール
+
+Issueの粒度は、以下のように分けるのが実務上扱いやすいです。
+
+| 粒度    | 適切なIssue例                 | 不適切なIssue例    |
+| ----- | ------------------------- | ------------- |
+| 調査    | 認証方式の既存実装を確認する            | 認証全体をよしなに作る   |
+| 基盤    | APIクライアントの共通エラー処理を追加する    | API層を全部作る     |
+| 機能    | ユーザー登録APIを実装する            | ユーザー管理機能を全部作る |
+| UI    | ログインフォームを実装する             | 画面全体を完成させる    |
+| テスト   | ユーザー登録APIの正常系・異常系テストを追加する | テストを整備する      |
+| リファクタ | 重複するバリデーション処理を共通化する       | コードをきれいにする    |
+
+目安は、**Claude Codeが1セッションで理解・実装・検証・説明できる範囲**です。
+大きすぎるIssueは、Claude Codeが仕様解釈・実装・テスト・設計判断を同時に抱え、品質が落ちます。
+
+---
+
+## Issue → worktree → branch の標準コマンド案
+
+GitHub CLIとgit worktreeを使う前提なら、Claude Codeに以下の標準手順を覚えさせるとよいです。`gh issue develop` はIssueに紐づく開発ブランチを管理するコマンドとして提供されています。([GitHub CLI][2])
+
+```bash
+# Issue確認
+gh issue view 123 --comments
+
+# Issueに紐づくbranchを作成
+gh issue develop 123 --name issue/123-user-registration-api --base main
+
+# branch取得
+git fetch origin issue/123-user-registration-api
+
+# worktree作成
+git worktree add ../worktrees/repo-issue-123 issue/123-user-registration-api
+
+# worktreeへ移動
+cd ../worktrees/repo-issue-123
+
+# Claude Code起動
+claude
+```
+
+Gitの公式ドキュメント上も、`git worktree add -b <new-branch> <path>` により、新しいブランチを作成して別作業ディレクトリへcheckoutできます。([Git][3])
+
+`gh issue develop` を使わない場合は、こちらでもよいです。
+
+```bash
+# branchとworktreeを同時作成
+git worktree add -b issue/123-user-registration-api ../worktrees/repo-issue-123 main
+
+# GitHubへpush
+git push -u origin issue/123-user-registration-api
+```
+
+---
+
+## Issueを読んで実装させるときのプロンプト
+
+各IssueごとのClaude Code起動後に貼る指示は、短く定型化した方がよいです。
+
+```text
+GitHub Issue #123 を解決してください。
+
+作業ルール：
+- このworktreeはIssue #123専用です。
+- まず `gh issue view 123 --comments` でIssue本文とコメントを読んでください。
+- Issue本文のスコープに限定して作業してください。
+- スコープ外の発見事項は実装せず、Issueコメントに記録してください。
+- 実装前に、対象仕様・既存実装・変更方針を短く整理してください。
+- 実装後、必要なテストを追加または更新してください。
+- lint / typecheck / test / build のうち、このリポジトリで利用可能な検証を実行してください。
+- code-reviewerでレビューしてください。
+- 必要に応じてsecurity-reviewerでレビューしてください。
+- 指摘事項を修正してください。
+- 最後にPRを作成し、Issueに進捗コメントを残してください。
+
+完了時の報告には以下を含めてください。
+- 対応したIssue
+- 作成したbranch
+- 作成したPR
+- 変更ファイル
+- 実装内容
+- 実行した検証コマンド
+- 検証結果
+- 未対応事項
+- スコープ外として記録した事項
+```
+
+---
+
+## Issueコメントの記録フォーマット
+
+Claude CodeにIssueへ残させるコメントは、定型化した方が追跡しやすいです。
+
+````markdown
+## Progress Update
+
+### Status
+- [ ] 調査中
+- [ ] 実装中
+- [ ] テスト中
+- [ ] レビュー中
+- [ ] PR作成済み
+- [ ] 完了
+
+### Summary
+このIssueで対応した内容を簡潔に記載する。
+
+### Changes
+- 
+
+### Verification
+実行したコマンド：
+
+```bash
+````
+
+結果：
+
+```text
+```
+
+### Review
+
+* code-reviewer:
+* security-reviewer:
+
+### Out of Scope Findings
+
+*
+
+### Remaining Work
+
+*
+
+````
+
+これを強制すると、Issueが「計画管理」だけでなく「作業証跡」になります。
+
+---
+
+## サブエージェントの役割修正版
+
+Issue駆動にするなら、サブエージェントは以下に再編した方がよいです。
+
+| サブエージェント | 主な役割 | 起動タイミング |
+|---|---|---|
+| spec-analyst | 仕様書からIssue候補を抽出 | 初期計画時 |
+| issue-planner | Issue本文、粒度、依存関係を設計 | Issue作成前 |
+| issue-runner | Issueを読み、作業全体を進行 | 各Issue開始時 |
+| implementation-agent | 実装担当 | 実装時 |
+| test-engineer | テスト設計・失敗分析 | 実装後 |
+| code-reviewer | 差分レビュー | PR前 |
+| security-reviewer | セキュリティレビュー | 認証・入力・外部連携・権限周り |
+| pr-writer | PR本文、Issueコメント作成 | 完了時 |
+
+前回の `backend-implementer` / `frontend-implementer` も有効ですが、Issue駆動なら最初は **issue-runner中心** でよいです。技術領域別エージェントは、コードベースが大きくなってから追加する方が運用負荷が低いです。
+
+---
+
+## `issue-runner` サブエージェント定義案
+
+`.claude/agents/issue-runner.md` はこのような内容がよいです。
+
+```markdown
+---
+name: issue-runner
+description: GitHub Issueを読み、スコープに限定して実装・検証・PR準備まで進行するエージェント
+tools: Read, Grep, Glob, Bash, Edit, Write
+---
+
+あなたはIssue駆動開発の実行担当です。
+
+必ず以下の順序で作業してください。
+
+1. `gh issue view <issue-number> --comments` でIssue本文とコメントを読む
+2. Issueの背景、対象仕様、スコープ、非スコープ、完了条件、検証方法を要約する
+3. 変更対象ファイルを特定する
+4. 実装方針を短く整理する
+5. Issueスコープに限定して実装する
+6. 必要なテストを追加または更新する
+7. 利用可能な検証コマンドを実行する
+8. 失敗した場合は原因を分析し、修正して再実行する
+9. code-reviewerにレビューを依頼する
+10. セキュリティ影響がある場合はsecurity-reviewerにレビューを依頼する
+11. 指摘事項を修正する
+12. Issueコメント用の進捗サマリとPR本文案を作成する
+
+制約：
+- Issueに記載されていない大きな変更をしない
+- 非スコープに記載された内容を実装しない
+- スコープ外の発見事項は別Issue候補として記録する
+- 検証していない内容を完了と主張しない
+- テスト失敗を無視しない
+- 仕様上の仮定は明記する
+````
+
+---
+
+## `issue-driven-development` SKILL案
+
+```markdown
+---
+name: issue-driven-development
+description: GitHub Issueを作業単位として、branch/worktree/PR/検証記録を一貫管理する
+---
+
+# Issue Driven Development
+
+このリポジトリでは、すべての実装作業をGitHub Issue単位で管理する。
+
+## 原則
+
+- 1 Issue = 1 branch = 1 worktree = 原則1 PR
+- Issue本文を作業指示書として扱う
+- Issue本文にない作業を勝手に実装しない
+- スコープ外の発見事項は別Issue候補として記録する
+- 作業完了時はIssueとPRに検証結果を残す
+
+## 作業開始
+
+1. Issue番号を確認する
+2. `gh issue view <issue-number> --comments` を実行する
+3. 背景、対象仕様、スコープ、非スコープ、完了条件、検証方法を読み取る
+4. 現在のbranchとworktreeがIssue専用であることを確認する
+5. 実装方針を短く整理する
+
+## 実装
+
+1. 関連ファイルを確認する
+2. 既存パターンに合わせて実装する
+3. 必要なテストを追加・更新する
+4. 仕様にない拡張は行わない
+
+## 検証
+
+1. format
+2. lint
+3. typecheck
+4. test
+5. build
+
+利用可能なものを実行し、実行できないものは理由を記録する。
+
+## レビュー
+
+1. code-reviewerでレビューする
+2. セキュリティ影響があればsecurity-reviewerでレビューする
+3. 指摘事項を修正する
+4. 再検証する
+
+## 完了
+
+1. PR本文を作成する
+2. Issueへ進捗コメントを残す
+3. PRとIssueを相互リンクする
+4. 未対応事項を明記する
+```
+
+---
+
+## Issue分割の実務ルール
+
+最初から全Issueを作り切るより、以下の三層に分けるのがよいです。
+
+```text
+Epic Issue
+  └─ Feature Issue
+       └─ Implementation Task Issue
+```
+
+ただし、Claude Codeに解かせるのは最下層だけです。
+
+### Epic Issue
+
+```text
+例：
+[EPIC] ユーザー認証機能
+```
+
+目的、全体スコープ、関連仕様、完了条件、配下Issue一覧を記載。
+
+### Feature Issue
+
+```text
+例：
+[Feature] メールアドレス・パスワードによるログイン
+```
+
+機能単位。設計論点や依存関係を整理。
+
+### Implementation Task Issue
+
+```text
+例：
+[Task] ログインAPIのリクエストバリデーションを実装する
+```
+
+Claude Codeが実装する単位。
+
+この分け方にすると、計画管理はGitHub Issueで見える一方、Claude Codeに渡すIssueは小さく保てます。
+
+---
+
+## 運用上の強い推奨
+
+設計としては、**Issue本文をClaude Codeへのプロンプトそのものにする**のが最も安定します。
+つまり、毎回長いプロンプトを書くのではなく、Issue側に必要なコンテキストを集約し、Claude Codeにはこう言えばよい状態にします。
+
+```text
+Issue #123 を読んで、このworktreeで解決してください。
+```
+
+そのためには、Issueテンプレートを強めにする必要があります。
+
+特に重要なのは以下です。
+
+```text
+非スコープ
+完了条件
+検証方法
+```
+
+この3つが弱いIssueは、Claude Codeが過剰実装・周辺修正・検証不足に寄りやすくなります。
+
+---
+
+## 最終的な推奨フロー
+
+```text
+1. 仕様書を読む
+2. spec-analystで実装候補を抽出
+3. issue-plannerでIssue候補に分割
+4. 人間がIssue候補を確認
+5. Claude Codeがgh issue createでIssueを作成
+6. Issueごとにbranch/worktree作成
+7. worktree内でClaude Code起動
+8. Issue本文とコメントを読む
+9. implementation-agentが実装
+10. test-engineerが検証
+11. code-reviewerがレビュー
+12. security-reviewerが必要時レビュー
+13. PR作成
+14. Issueへ検証結果をコメント
+15. merge後Issue close
+16. worktree削除
+```
+
+この形にすると、Claude Codeの作業が「会話ログ」ではなく、**GitHub Issue / PR / commit / CI結果に残る開発プロセス**になります。
+チーム開発・後続レビュー・引き継ぎを考えるなら、この構成が最も扱いやすいです。
+
+[1]: https://code.claude.com/docs/en/worktrees?utm_source=chatgpt.com "Run parallel sessions with worktrees - Claude Code Docs"
+[2]: https://cli.github.com/manual/gh_issue_develop?utm_source=chatgpt.com "gh issue develop"
+[3]: https://git-scm.com/docs/git-worktree?utm_source=chatgpt.com "Git - git-worktree Documentation"
