@@ -69,7 +69,7 @@ def render_dirs(tmp_path, monkeypatch):
 def test_render_all_writes_per_dataset_fragments(render_dirs) -> None:
     """各データセット × analyst/owner × 3 分析のフラグメントが生成される。
 
-    旧パス互換(legacy_paths=True)のデータセットは fragments/{analyst,owner}/ にも出力する。
+    出力は per-dataset パス fragments/<dataset_id>/{analyst,owner}/ のみ。
     """
     _, frag_dir, small = render_dirs
     render.render_all()
@@ -81,15 +81,13 @@ def test_render_all_writes_per_dataset_fragments(render_dirs) -> None:
                 f = frag_dir / ds.dataset_id / sub / f"{name}.html"
                 assert f.exists(), f"missing: {ds.dataset_id}/{sub}/{name}.html"
             expected += len(ANALYSIS_NAMES)
-        if ds.legacy_paths:
-            for sub in ("analyst", "owner"):
-                for name in ANALYSIS_NAMES:
-                    f = frag_dir / sub / f"{name}.html"
-                    assert f.exists(), f"missing legacy: {sub}/{name}.html"
-                expected += len(ANALYSIS_NAMES)
 
     written = sorted(p.relative_to(frag_dir).as_posix() for p in frag_dir.rglob("*.html"))
     assert len(written) == expected
+
+    # 旧 ROOT レベル fragments/{analyst,owner}/ は生成されない(レグレッション防止)。
+    for sub in ("analyst", "owner"):
+        assert not (frag_dir / sub).exists(), f"legacy root fragments/{sub} must not exist"
 
 
 @pytest.mark.parametrize("sub,kind", list(KINDS.items()))
@@ -97,12 +95,13 @@ def test_render_all_writes_per_dataset_fragments(render_dirs) -> None:
 def test_fragment_contains_required_elements(render_dirs, sub: str, kind: str, name: str) -> None:
     """各フラグメントが必須要素(canvas/cfg/table/data 属性)を uid 付きで含む。
 
-    旧パス互換 fragments/<sub>/ を代表として検証する(中身はデータセット非依存の同形)。
+    per-dataset パス fragments/prostate-psa/<sub>/ を代表として検証する
+    (中身はデータセット非依存の同形)。
     """
     _, frag_dir, _ = render_dirs
     render.render_all()
 
-    html = (frag_dir / sub / f"{name}.html").read_text(encoding="utf-8")
+    html = (frag_dir / "prostate-psa" / sub / f"{name}.html").read_text(encoding="utf-8")
     uid = f"{kind}-{name}"
 
     assert f'id="chart-{uid}"' in html
@@ -119,7 +118,7 @@ def test_embedded_cfg_is_valid_chart_json(render_dirs, sub: str, kind: str, name
     _, frag_dir, _ = render_dirs
     render.render_all()
 
-    html = (frag_dir / sub / f"{name}.html").read_text(encoding="utf-8")
+    html = (frag_dir / "prostate-psa" / sub / f"{name}.html").read_text(encoding="utf-8")
     uid = f"{kind}-{name}"
 
     # <script ... id="cfg-{uid}">{JSON}</script> から JSON 本文を取り出す

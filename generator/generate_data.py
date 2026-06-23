@@ -235,8 +235,6 @@ class Dataset:
     usage_examples: list[str]
     raw: Profile
     synthetic: Profile
-    # 旧パス互換: True の場合 site/data/{raw,synthetic}.json も生成する。
-    legacy_paths: bool = False
 
 
 # 既存の前立腺がん PSA データセット。raw/synthetic の Profile は既存値を厳密に維持する
@@ -259,7 +257,6 @@ DATASETS: list[Dataset] = [
         ],
         raw=Profile(name="raw", seed=20210101, n_patients=180, shift=0.0),
         synthetic=Profile(name="synthetic", seed=99999, n_patients=180, shift=1.0),
-        legacy_paths=True,
     ),
     Dataset(
         dataset_id="renal-marker",
@@ -293,7 +290,6 @@ DATASETS: list[Dataset] = [
             id_prefix="RNL-S",
             risk_params=_MARKER_RISK_PARAMS,
         ),
-        legacy_paths=False,
     ),
 ]
 
@@ -318,8 +314,6 @@ def _catalog_entry(ds: Dataset, syn: dict) -> dict:
         tags=ds.tags,
         usage_examples=ds.usage_examples,
         n_patients=ds.synthetic.n_patients,
-        # 旧パス互換のため、フロントが従来パスを参照できるか示す
-        legacy_paths=ds.legacy_paths,
         paths=dict(
             raw=f"data/{ds.dataset_id}/raw.json",
             synthetic=f"data/{ds.dataset_id}/synthetic.json",
@@ -350,12 +344,6 @@ def build() -> None:
                 f"  wrote {out.relative_to(OUT_DIR.parent.parent)}  "
                 f"({prof.n_patients} patients, {n_psa} PSA rows)"
             )
-            # 旧パス互換(prostate-psa のみ): site/data/{raw,synthetic}.json も生成する。
-            # PF-1(#21) の既存デモ・E2E が旧パスを参照しているため後方互換を保つ。
-            if ds.legacy_paths:
-                legacy = OUT_DIR / f"{prof.name}.json"
-                legacy.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-                print(f"  wrote {legacy.relative_to(OUT_DIR.parent.parent)}  (legacy-compat)")
 
         catalog.append(_catalog_entry(ds, generated["synthetic"]))
 

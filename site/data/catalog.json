@@ -19,7 +19,6 @@
         "リスク群別の無進行生存(Kaplan-Meier)を比較する"
       ],
       "n_patients": 180,
-      "legacy_paths": true,
       "paths": {
         "raw": "data/prostate-psa/raw.json",
         "synthetic": "data/prostate-psa/synthetic.json",
@@ -138,7 +137,6 @@
         "リスク群別の無進行生存(Kaplan-Meier)を比較する"
       ],
       "n_patients": 150,
-      "legacy_paths": false,
       "paths": {
         "raw": "data/renal-marker/raw.json",
         "synthetic": "data/renal-marker/synthetic.json",
