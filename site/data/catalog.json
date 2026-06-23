@@ -1,0 +1,243 @@
+{
+  "datasets": [
+    {
+      "dataset_id": "prostate-psa",
+      "title": "前立腺がん PSA 推移と ADT 投薬",
+      "description": "前立腺がん患者の PSA(前立腺特異抗原)時系列と ADT(アンドロゲン除去療法)投薬の合成コホート。ADT 開始後の PSA 低下・nadir・生化学的再発(Phoenix 基準)を含む。",
+      "owner": "urology-research",
+      "domain": "oncology/urology",
+      "tags": [
+        "prostate-cancer",
+        "psa",
+        "adt",
+        "survival",
+        "longitudinal"
+      ],
+      "usage_examples": [
+        "PSA 軌跡の時系列クラスタリングで治療反応サブタイプを同定する",
+        "ADT 用量と PSA 低下率の関連を単回帰で評価する",
+        "リスク群別の無進行生存(Kaplan-Meier)を比較する"
+      ],
+      "n_patients": 180,
+      "legacy_paths": true,
+      "paths": {
+        "raw": "data/prostate-psa/raw.json",
+        "synthetic": "data/prostate-psa/synthetic.json",
+        "fragments_analyst": "fragments/prostate-psa/analyst",
+        "fragments_owner": "fragments/prostate-psa/owner"
+      },
+      "dummy_preview": {
+        "patients": [
+          {
+            "patient_id": "SYN-0001",
+            "age": 65,
+            "risk_group": "intermediate",
+            "enrollment_date": "2021-02-01"
+          },
+          {
+            "patient_id": "SYN-0002",
+            "age": 59,
+            "risk_group": "high",
+            "enrollment_date": "2022-04-15"
+          },
+          {
+            "patient_id": "SYN-0003",
+            "age": 63,
+            "risk_group": "intermediate",
+            "enrollment_date": "2022-03-11"
+          },
+          {
+            "patient_id": "SYN-0004",
+            "age": 66,
+            "risk_group": "low",
+            "enrollment_date": "2022-02-25"
+          },
+          {
+            "patient_id": "SYN-0005",
+            "age": 79,
+            "risk_group": "intermediate",
+            "enrollment_date": "2022-02-19"
+          }
+        ],
+        "psa_measurements": [
+          {
+            "patient_id": "SYN-0001",
+            "date": "2021-02-06",
+            "psa": 26.18
+          },
+          {
+            "patient_id": "SYN-0001",
+            "date": "2021-05-08",
+            "psa": 18.66
+          },
+          {
+            "patient_id": "SYN-0001",
+            "date": "2021-08-07",
+            "psa": 11.46
+          },
+          {
+            "patient_id": "SYN-0001",
+            "date": "2021-11-06",
+            "psa": 8.06
+          },
+          {
+            "patient_id": "SYN-0001",
+            "date": "2022-02-05",
+            "psa": 8.06
+          }
+        ],
+        "medications": [
+          {
+            "patient_id": "SYN-0001",
+            "datetime": "2021-02-06T09:00:00",
+            "drug": "bicalutamide",
+            "dose_mg": 50.0
+          },
+          {
+            "patient_id": "SYN-0002",
+            "datetime": "2022-04-26T09:00:00",
+            "drug": "leuprolide",
+            "dose_mg": 33.8
+          },
+          {
+            "patient_id": "SYN-0003",
+            "datetime": "2022-03-29T09:00:00",
+            "drug": "goserelin",
+            "dose_mg": 16.2
+          },
+          {
+            "patient_id": "SYN-0004",
+            "datetime": "2022-02-28T09:00:00",
+            "drug": "leuprolide",
+            "dose_mg": 22.5
+          },
+          {
+            "patient_id": "SYN-0005",
+            "datetime": "2022-03-07T09:00:00",
+            "drug": "leuprolide",
+            "dose_mg": 33.8
+          }
+        ]
+      }
+    },
+    {
+      "dataset_id": "renal-marker",
+      "title": "腎細胞がん 腫瘍マーカー推移と分子標的薬",
+      "description": "腎細胞がん患者の腫瘍マーカー時系列と分子標的薬投与の合成コホート。PSA データセットと同型(3テーブル)だが別ドメイン・別パラメータ・別 seed で生成し、同一の3分析をそのまま適用できる。値は架空の腫瘍マーカー(ng/mL)とみなす。",
+      "owner": "oncology-data-lab",
+      "domain": "oncology/nephrology",
+      "tags": [
+        "renal-cancer",
+        "tumor-marker",
+        "targeted-therapy",
+        "longitudinal"
+      ],
+      "usage_examples": [
+        "腫瘍マーカー軌跡のクラスタリングで反応パターンを層別化する",
+        "投与量とマーカー低下率の関連を評価する",
+        "リスク群別の無進行生存(Kaplan-Meier)を比較する"
+      ],
+      "n_patients": 150,
+      "legacy_paths": false,
+      "paths": {
+        "raw": "data/renal-marker/raw.json",
+        "synthetic": "data/renal-marker/synthetic.json",
+        "fragments_analyst": "fragments/renal-marker/analyst",
+        "fragments_owner": "fragments/renal-marker/owner"
+      },
+      "dummy_preview": {
+        "patients": [
+          {
+            "patient_id": "RNL-S-0001",
+            "age": 78,
+            "risk_group": "intermediate",
+            "enrollment_date": "2021-01-27"
+          },
+          {
+            "patient_id": "RNL-S-0002",
+            "age": 79,
+            "risk_group": "intermediate",
+            "enrollment_date": "2022-01-11"
+          },
+          {
+            "patient_id": "RNL-S-0003",
+            "age": 80,
+            "risk_group": "low",
+            "enrollment_date": "2021-12-09"
+          },
+          {
+            "patient_id": "RNL-S-0004",
+            "age": 83,
+            "risk_group": "intermediate",
+            "enrollment_date": "2022-04-14"
+          },
+          {
+            "patient_id": "RNL-S-0005",
+            "age": 74,
+            "risk_group": "high",
+            "enrollment_date": "2022-06-22"
+          }
+        ],
+        "psa_measurements": [
+          {
+            "patient_id": "RNL-S-0001",
+            "date": "2021-01-30",
+            "psa": 17.21
+          },
+          {
+            "patient_id": "RNL-S-0001",
+            "date": "2021-05-01",
+            "psa": 11.33
+          },
+          {
+            "patient_id": "RNL-S-0001",
+            "date": "2021-07-31",
+            "psa": 7.42
+          },
+          {
+            "patient_id": "RNL-S-0001",
+            "date": "2021-10-30",
+            "psa": 8.24
+          },
+          {
+            "patient_id": "RNL-S-0001",
+            "date": "2022-01-29",
+            "psa": 5.94
+          }
+        ],
+        "medications": [
+          {
+            "patient_id": "RNL-S-0001",
+            "datetime": "2021-01-30T09:00:00",
+            "drug": "goserelin",
+            "dose_mg": 10.8
+          },
+          {
+            "patient_id": "RNL-S-0002",
+            "datetime": "2022-01-19T09:00:00",
+            "drug": "leuprolide",
+            "dose_mg": 33.8
+          },
+          {
+            "patient_id": "RNL-S-0003",
+            "datetime": "2021-12-26T09:00:00",
+            "drug": "goserelin",
+            "dose_mg": 5.4
+          },
+          {
+            "patient_id": "RNL-S-0004",
+            "datetime": "2022-05-01T09:00:00",
+            "drug": "goserelin",
+            "dose_mg": 10.8
+          },
+          {
+            "patient_id": "RNL-S-0005",
+            "datetime": "2022-07-07T09:00:00",
+            "drug": "goserelin",
+            "dose_mg": 16.2
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -25,4 +25,7 @@ serve:
 	cd $(SITE) && $(PY) -m http.server 8000
 
 clean:
-	rm -rf $(SITE)/data $(SITE)/fragments/analyst $(SITE)/fragments/owner
+	# data/ 配下(catalog.json・各データセットの raw/synthetic・旧パス互換 json)を一括削除。
+	rm -rf $(SITE)/data
+	# fragments/ 配下: 各データセットの <dataset_id>/ と、旧パス互換の analyst/ owner/ を削除。
+	[ -d $(SITE)/fragments ] && find $(SITE)/fragments -mindepth 1 -maxdepth 1 -type d -exec rm -rf {} + || true

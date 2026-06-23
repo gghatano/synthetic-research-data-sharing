@@ -10,69 +10,96 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 
 import pytest
 
-from generator import render
+from generator import generate_data, render
 from generator.analyses import ANALYSES
-from generator.generate_data import Profile, _generate
+from generator.generate_data import _generate
 
 KINDS = {"analyst": "synthetic", "owner": "raw"}
 ANALYSIS_NAMES = list(ANALYSES)  # clustering / association / survival
 CHART_TYPES = {"clustering": "line", "association": "scatter", "survival": "line"}
 
 
+def _small_datasets():
+    """テスト用に小 n(=30) へ縮めた DATASETS。既存レジストリのメタ/構成を流用する。"""
+    small = []
+    for ds in generate_data.DATASETS:
+        raw = replace(ds.raw, n_patients=30)
+        syn = replace(ds.synthetic, n_patients=30)
+        small.append(replace(ds, raw=raw, synthetic=syn))
+    return small
+
+
 @pytest.fixture
 def render_dirs(tmp_path, monkeypatch):
-    """DATA_DIR/FRAG_DIR を tmp に差し替え、小 n の入力 JSON を書き出す。
+    """DATA_DIR/FRAG_DIR を tmp に差し替え、各データセットの小 n 入力 JSON を書き出す。
 
-    raw=shift0.0 / synthetic=shift1.0、それぞれ n=30。
+    レジストリ(DATASETS)も小 n 版へ差し替える。raw=shift0.0 / synthetic=shift1.0、n=30。
     """
     data_dir = tmp_path / "data"
     frag_dir = tmp_path / "fragments"
     data_dir.mkdir()
     frag_dir.mkdir()
 
+    small = _small_datasets()
     monkeypatch.setattr(render, "DATA_DIR", data_dir)
     monkeypatch.setattr(render, "FRAG_DIR", frag_dir)
+    monkeypatch.setattr(render, "DATASETS", small)
     # render_all() の進捗 print が `relative_to(ROOT)` を使うため、ROOT も tmp に揃える
     # (出力先は FRAG_DIR から導出されるので、ROOT の差し替えは print 表示のみに影響する)
     monkeypatch.setattr(render, "ROOT", tmp_path)
 
-    profiles = {
-        "raw": Profile(name="raw", seed=20210101, n_patients=30, shift=0.0),
-        "synthetic": Profile(name="synthetic", seed=99999, n_patients=30, shift=1.0),
-    }
-    for name, prof in profiles.items():
-        data = _generate(prof)
-        (data_dir / f"{name}.json").write_text(
-            json.dumps(data, ensure_ascii=False), encoding="utf-8"
-        )
-    return data_dir, frag_dir
+    for ds in small:
+        ds_dir = data_dir / ds.dataset_id
+        ds_dir.mkdir(parents=True, exist_ok=True)
+        for prof in (ds.raw, ds.synthetic):
+            data = _generate(prof)
+            (ds_dir / f"{prof.name}.json").write_text(
+                json.dumps(data, ensure_ascii=False), encoding="utf-8"
+            )
+    return data_dir, frag_dir, small
 
 
 # --- end-to-end (tmp へ) -----------------------------------------------------
 
 
-def test_render_all_writes_six_fragments(render_dirs) -> None:
-    """analyst/owner × 3 分析 = 計 6 ファイルが生成される。"""
-    _, frag_dir = render_dirs
+def test_render_all_writes_per_dataset_fragments(render_dirs) -> None:
+    """各データセット × analyst/owner × 3 分析のフラグメントが生成される。
+
+    旧パス互換(legacy_paths=True)のデータセットは fragments/{analyst,owner}/ にも出力する。
+    """
+    _, frag_dir, small = render_dirs
     render.render_all()
 
-    for sub in ("analyst", "owner"):
-        for name in ANALYSIS_NAMES:
-            f = frag_dir / sub / f"{name}.html"
-            assert f.exists(), f"missing fragment: {sub}/{name}.html"
+    expected = 0
+    for ds in small:
+        for sub in ("analyst", "owner"):
+            for name in ANALYSIS_NAMES:
+                f = frag_dir / ds.dataset_id / sub / f"{name}.html"
+                assert f.exists(), f"missing: {ds.dataset_id}/{sub}/{name}.html"
+            expected += len(ANALYSIS_NAMES)
+        if ds.legacy_paths:
+            for sub in ("analyst", "owner"):
+                for name in ANALYSIS_NAMES:
+                    f = frag_dir / sub / f"{name}.html"
+                    assert f.exists(), f"missing legacy: {sub}/{name}.html"
+                expected += len(ANALYSIS_NAMES)
 
     written = sorted(p.relative_to(frag_dir).as_posix() for p in frag_dir.rglob("*.html"))
-    assert len(written) == 6
+    assert len(written) == expected
 
 
 @pytest.mark.parametrize("sub,kind", list(KINDS.items()))
 @pytest.mark.parametrize("name", ANALYSIS_NAMES)
 def test_fragment_contains_required_elements(render_dirs, sub: str, kind: str, name: str) -> None:
-    """各フラグメントが必須要素(canvas/cfg/table/data 属性)を uid 付きで含む。"""
-    _, frag_dir = render_dirs
+    """各フラグメントが必須要素(canvas/cfg/table/data 属性)を uid 付きで含む。
+
+    旧パス互換 fragments/<sub>/ を代表として検証する(中身はデータセット非依存の同形)。
+    """
+    _, frag_dir, _ = render_dirs
     render.render_all()
 
     html = (frag_dir / sub / f"{name}.html").read_text(encoding="utf-8")
@@ -89,7 +116,7 @@ def test_fragment_contains_required_elements(render_dirs, sub: str, kind: str, n
 @pytest.mark.parametrize("name", ANALYSIS_NAMES)
 def test_embedded_cfg_is_valid_chart_json(render_dirs, sub: str, kind: str, name: str) -> None:
     """埋め込み cfg JSON が json.loads 可能で、想定の type を持つ chart config。"""
-    _, frag_dir = render_dirs
+    _, frag_dir, _ = render_dirs
     render.render_all()
 
     html = (frag_dir / sub / f"{name}.html").read_text(encoding="utf-8")

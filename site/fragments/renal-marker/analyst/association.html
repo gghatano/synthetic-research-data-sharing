@@ -1,0 +1,49 @@
+<section class="fragment" data-kind="synthetic" data-analysis="association">
+  <div class="frag-head">
+    <span class="badge badge-synthetic">合成データ</span>
+    <h3>投薬–PSA反応の関連分析</h3>
+    <span class="frag-n">n = 150</span>
+  </div>
+
+  <div class="chart-box">
+    <canvas id="chart-synthetic-association"></canvas>
+  </div>
+
+  <table class="frag-table">
+    <thead><tr><th>薬剤</th><th>n</th><th>平均低下率(%)</th><th>SD</th><th>平均用量(mg)</th></tr></thead>
+    <tbody>
+      <tr><td>bicalutamide</td><td>39</td><td>90.1</td>
+        <td>8.3</td><td>53.8</td></tr>
+      <tr><td>leuprolide</td><td>59</td><td>74.4</td>
+        <td>12.0</td><td>22.9</td></tr>
+      <tr><td>goserelin</td><td>52</td><td>69.2</td>
+        <td>12.3</td><td>11.4</td></tr>
+    </tbody>
+  </table>
+  <p class="frag-note">用量–低下率 単回帰: 傾き = 0.388 %/mg,
+    切片 = 66.23 %, R² = 0.282</p>
+
+
+  <details class="frag-code">
+    <summary>適用された分析コード(抜粋)</summary>
+    <pre><code>feat['reduction_pct'] = 100*(feat.baseline-feat.nadir)/feat.baseline
+m = feat.merge(meds, on='patient_id')
+slope, intercept = np.polyfit(m.dose_mg, m.reduction_pct, 1)</code></pre>
+  </details>
+
+  <script type="application/json" id="cfg-synthetic-association">{"type": "scatter", "data": {"datasets": [{"label": "患者", "data": [{"x": 10.8, "y": 71.6}, {"x": 33.8, "y": 80.7}, {"x": 5.4, "y": 82.5}, {"x": 75.0, "y": 86.1}, {"x": 33.8, "y": 97.1}, {"x": 16.2, "y": 64.4}, {"x": 10.8, "y": 76.3}, {"x": 75.0, "y": 80.5}, {"x": 11.2, "y": 71.4}, {"x": 75.0, "y": 96.4}, {"x": 22.5, "y": 68.7}, {"x": 22.5, "y": 78.7}, {"x": 16.2, "y": 67.0}, {"x": 50.0, "y": 89.2}, {"x": 22.5, "y": 77.5}, {"x": 11.2, "y": 90.1}, {"x": 50.0, "y": 99.8}, {"x": 22.5, "y": 58.1}, {"x": 10.8, "y": 46.2}, {"x": 16.2, "y": 48.8}, {"x": 50.0, "y": 96.0}, {"x": 22.5, "y": 82.3}, {"x": 25.0, "y": 96.3}, {"x": 10.8, "y": 88.7}, {"x": 10.8, "y": 71.5}, {"x": 5.4, "y": 81.8}, {"x": 75.0, "y": 99.7}, {"x": 22.5, "y": 84.8}, {"x": 11.2, "y": 61.4}, {"x": 10.8, "y": 67.5}, {"x": 16.2, "y": 70.6}, {"x": 33.8, "y": 62.7}, {"x": 11.2, "y": 85.4}, {"x": 11.2, "y": 82.9}, {"x": 10.8, "y": 55.8}, {"x": 75.0, "y": 79.8}, {"x": 22.5, "y": 85.8}, {"x": 5.4, "y": 73.9}, {"x": 22.5, "y": 70.1}, {"x": 75.0, "y": 82.7}, {"x": 33.8, "y": 83.9}, {"x": 5.4, "y": 68.5}, {"x": 10.8, "y": 77.3}, {"x": 75.0, "y": 99.8}, {"x": 25.0, "y": 81.7}, {"x": 22.5, "y": 75.3}, {"x": 22.5, "y": 51.2}, {"x": 10.8, "y": 50.3}, {"x": 10.8, "y": 69.6}, {"x": 10.8, "y": 71.5}, {"x": 50.0, "y": 92.1}, {"x": 50.0, "y": 89.6}, {"x": 33.8, "y": 84.7}, {"x": 22.5, "y": 54.2}, {"x": 16.2, "y": 74.0}, {"x": 50.0, "y": 99.8}, {"x": 10.8, "y": 61.4}, {"x": 50.0, "y": 81.0}, {"x": 33.8, "y": 61.1}, {"x": 22.5, "y": 69.6}, {"x": 22.5, "y": 68.4}, {"x": 11.2, "y": 60.5}, {"x": 11.2, "y": 74.6}, {"x": 10.8, "y": 78.1}, {"x": 16.2, "y": 77.8}, {"x": 22.5, "y": 66.9}, {"x": 22.5, "y": 78.4}, {"x": 33.8, "y": 61.8}, {"x": 10.8, "y": 45.9}, {"x": 22.5, "y": 88.2}, {"x": 33.8, "y": 99.1}, {"x": 22.5, "y": 94.3}, {"x": 11.2, "y": 78.9}, {"x": 10.8, "y": 71.9}, {"x": 10.8, "y": 76.4}, {"x": 10.8, "y": 62.3}, {"x": 75.0, "y": 79.2}, {"x": 16.2, "y": 69.9}, {"x": 22.5, "y": 76.3}, {"x": 50.0, "y": 93.0}, {"x": 50.0, "y": 99.0}, {"x": 50.0, "y": 88.2}, {"x": 50.0, "y": 73.2}, {"x": 22.5, "y": 91.2}, {"x": 16.2, "y": 81.8}, {"x": 50.0, "y": 82.9}, {"x": 10.8, "y": 79.8}, {"x": 10.8, "y": 60.7}, {"x": 75.0, "y": 91.2}, {"x": 25.0, "y": 77.2}, {"x": 22.5, "y": 61.3}, {"x": 22.5, "y": 65.3}, {"x": 10.8, "y": 54.4}, {"x": 10.8, "y": 55.7}, {"x": 33.8, "y": 83.4}, {"x": 50.0, "y": 91.9}, {"x": 16.2, "y": 94.9}, {"x": 22.5, "y": 71.6}, {"x": 22.5, "y": 53.4}, {"x": 22.5, "y": 70.0}, {"x": 11.2, "y": 75.4}, {"x": 50.0, "y": 99.8}, {"x": 10.8, "y": 52.3}, {"x": 22.5, "y": 60.5}, {"x": 50.0, "y": 99.9}, {"x": 5.4, "y": 48.7}, {"x": 5.4, "y": 85.2}, {"x": 22.5, "y": 89.6}, {"x": 75.0, "y": 99.9}, {"x": 33.8, "y": 65.9}, {"x": 5.4, "y": 54.6}, {"x": 11.2, "y": 54.3}, {"x": 50.0, "y": 97.6}, {"x": 50.0, "y": 93.8}, {"x": 10.8, "y": 51.3}, {"x": 22.5, "y": 52.5}, {"x": 50.0, "y": 99.9}, {"x": 33.8, "y": 79.8}, {"x": 10.8, "y": 89.3}, {"x": 16.2, "y": 85.4}], "backgroundColor": "#1565c0", "pointRadius": 3}, {"label": "回帰直線 (R²=0.282)", "data": [{"x": 5.4, "y": 68.3}, {"x": 75.0, "y": 95.3}], "type": "line", "borderColor": "#c62828", "borderWidth": 2, "pointRadius": 0, "fill": false}]}, "options": {"responsive": true, "maintainAspectRatio": false, "plugins": {"legend": {"position": "bottom"}, "title": {"display": true, "text": "用量 vs PSA低下率"}}, "scales": {"x": {"title": {"display": true, "text": "用量 (mg)"}}, "y": {"title": {"display": true, "text": "PSA低下率 (%)"}}}}}</script>
+  <script>
+    (function () {
+      var uid = "synthetic-association";
+      function draw() {
+        var el = document.getElementById("chart-" + uid);
+        var cfgEl = document.getElementById("cfg-" + uid);
+        if (!el || !cfgEl || typeof Chart === "undefined") return;
+        var existing = Chart.getChart(el);   // 再読込時の二重描画を防ぐ
+        if (existing) existing.destroy();
+        new Chart(el.getContext("2d"), JSON.parse(cfgEl.textContent));
+      }
+      draw();
+    })();
+  </script>
+</section>
