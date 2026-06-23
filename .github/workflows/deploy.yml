@@ -1,12 +1,13 @@
 name: Deploy to GitHub Pages
 
-# develop(既定ブランチ) への push と手動実行でビルド→デプロイする。
+# main(公開/リリースブランチ) への push と手動実行でビルド→デプロイする。
+# develop は統合(既定)ブランチで、リリース時に develop→main へマージして公開する。
 # Python で生データ・合成データを生成し、3分析を適用して HTML フラグメントを
 # 事前レンダリングしたうえで site/ を Pages 成果物として公開する。
 
 on:
   push:
-    branches: [develop]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
