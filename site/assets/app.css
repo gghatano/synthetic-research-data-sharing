@@ -15,6 +15,9 @@
 
 * { box-sizing: border-box; }
 
+/* Alpine の x-cloak: 初期化前のチラつきを抑止 */
+[x-cloak] { display: none !important; }
+
 body {
   margin: 0;
   font-family: system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif;
@@ -31,6 +34,35 @@ body {
 .site-head h1 { margin: 0 0 6px; font-size: 1.5rem; }
 .site-head .sub { margin: 0; opacity: .92; font-size: .95rem; }
 .site-head strong { color: #ffe082; }
+
+/* ---- app bar ---- */
+.appbar {
+  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  max-width: 1100px; margin: 0 auto;
+}
+.appbar-brand { flex: 1 1 auto; min-width: 240px; }
+.appbar-user { display: flex; align-items: center; gap: 12px; }
+.appbar-user .who { display: flex; align-items: center; gap: 8px; font-size: .9rem; }
+.role-pill {
+  font-size: .72rem; font-weight: 700; padding: 2px 9px; border-radius: 999px;
+  background: rgba(255, 255, 255, .18); border: 1px solid rgba(255, 255, 255, .35);
+}
+button.ghost-light {
+  border-color: rgba(255, 255, 255, .6); color: #fff; background: rgba(255, 255, 255, .08);
+}
+button.ghost-light:hover { background: rgba(255, 255, 255, .18); }
+
+/* ---- main nav ---- */
+.mainnav {
+  display: flex; gap: 6px; padding: 10px 24px; background: var(--panel);
+  border-bottom: 1px solid var(--line); flex-wrap: wrap;
+}
+.mainnav > * { max-width: 1100px; }
+.mainnav button {
+  border: 1px solid var(--line); background: #eef1f6; color: var(--muted);
+  padding: 8px 16px; border-radius: 8px; cursor: pointer; font-size: .9rem;
+}
+.mainnav button.sel { background: var(--brand); color: #fff; border-color: var(--brand); font-weight: 600; }
 
 /* ---- stepper ---- */
 .stepper { background: var(--panel); border-bottom: 1px solid var(--line); }
@@ -70,6 +102,14 @@ main { max-width: 1100px; margin: 0 auto; padding: 0 24px 40px; }
   padding: 24px; box-shadow: var(--shadow);
 }
 .panel h2 { margin-top: 0; font-size: 1.2rem; }
+
+/* シェル(login/top/register)パネル: .panel と同じ見た目だが
+   既存 e2e の `section.panel` セレクタには含めない(探索ビューの 3 ロールデモのみが .panel)。 */
+.shell-panel {
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 24px; box-shadow: var(--shadow); margin-top: 16px;
+}
+.shell-panel h2 { margin-top: 0; font-size: 1.2rem; }
 
 /* ---- publish cards ---- */
 .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 18px 0; }
@@ -157,6 +197,169 @@ button.ghost {
   padding: 12px 14px; font-size: .9rem; margin: 6px 0 0;
 }
 .callout strong { color: var(--green); }
+
+/* ---- login ---- */
+.login-panel { max-width: 560px; margin: 24px auto; }
+.login-label { display: block; font-size: .85rem; font-weight: 600; color: var(--muted); margin-bottom: 6px; }
+.login-presets { margin: 16px 0; }
+.login-presets .chip { display: inline-flex; align-items: center; gap: 6px; margin: 0 8px 8px 0; }
+.login-presets .chip small { opacity: .8; }
+.login-form { display: flex; flex-direction: column; gap: 16px; margin-top: 8px; }
+.field { display: block; }
+.login-form input[type="text"] {
+  width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px;
+  font-size: .95rem; background: #fcfdff;
+}
+.role-field { border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; margin: 0; }
+.role-field legend { padding: 0 4px; }
+.radio { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: .92rem; cursor: pointer; }
+.login-error { color: var(--raw); font-size: .88rem; margin: 0; }
+
+/* ---- nav cards (top) ---- */
+.nav-card { display: flex; flex-direction: column; }
+.nav-card p { flex: 1 1 auto; }
+.nav-card .primary { align-self: flex-start; margin-top: 8px; }
+
+/* ---- register form (#24, owner 専用) ---- */
+.register-panel { max-width: 760px; }
+.register-intro { color: var(--ink); margin: 0 0 12px; }
+.register-intro strong { color: var(--brand); }
+.linklike {
+  background: none; border: none; padding: 0; color: var(--brand); font: inherit;
+  cursor: pointer; text-decoration: underline;
+}
+.register-disclaimer {
+  background: #fff8ec; border: 1px solid #f0dcb0; border-radius: var(--radius);
+  padding: 12px 14px; font-size: .85rem; color: #6b5a30; margin: 0 0 18px; line-height: 1.55;
+}
+.register-disclaimer strong { color: #8a6d1f; }
+.register-form { display: flex; flex-direction: column; gap: 16px; }
+.register-form input[type="text"],
+.register-form input[type="number"],
+.register-form textarea,
+.register-form select {
+  width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px;
+  font-size: .95rem; background: #fcfdff; font-family: inherit; box-sizing: border-box;
+}
+.register-form textarea { resize: vertical; }
+.req { color: var(--raw); }
+.reg-row { display: flex; gap: 16px; flex-wrap: wrap; }
+.reg-row .field { flex: 1 1 200px; }
+.reg-source {
+  border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; margin: 0;
+}
+.reg-source legend { padding: 0 4px; }
+.reg-source-body { margin: 4px 0 12px 26px; }
+.reg-filestatus { font-size: .82rem; color: var(--muted); margin: 6px 0 0; }
+.reg-ok { color: var(--green); font-size: .9rem; margin: 0; font-weight: 600; }
+.reg-registered { margin-top: 28px; border-top: 1px solid var(--line); padding-top: 18px; }
+.reg-registered h3 { margin: 0 0 10px; font-size: 1.05rem; }
+.reg-list { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
+.reg-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.reg-item-main { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.reg-item .actions { margin-top: 0; }
+
+/* ---- explore shell (既存 3 ロールデモを内包) ---- */
+.explore-intro { color: var(--muted); margin: 4px 0 12px; }
+.explore-intro strong { color: var(--brand); }
+.stepper.inline { border: 1px solid var(--line); border-radius: var(--radius); margin-bottom: 8px; }
+.explore-shell .tabs { padding-left: 0; padding-right: 0; }
+.explore-shell > .panel { box-shadow: none; }
+.explore-shell {
+  border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 16px; margin-top: 16px; background: #fbfcfe;
+}
+
+/* ---- catalog list ---- */
+.catalog-view { margin-top: 16px; }
+.catalog-head h2 { margin: 0 0 6px; font-size: 1.3rem; }
+.catalog-intro { color: var(--muted); margin: 0 0 16px; }
+.catalog-intro strong { color: var(--brand); }
+.catalog-toolbar {
+  display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; margin-bottom: 16px;
+}
+.catalog-search { flex: 1 1 320px; max-width: 460px; }
+.catalog-search input {
+  width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px;
+  font-size: .95rem; background: #fcfdff;
+}
+.catalog-count { color: var(--muted); font-size: .85rem; white-space: nowrap; }
+.catalog-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
+.catalog-card { display: flex; flex-direction: column; background: var(--panel); box-shadow: var(--shadow); }
+.catalog-card h3 { margin: 0 0 8px; font-size: 1.05rem; }
+.catalog-card .catalog-desc { flex: 1 1 auto; font-size: .9rem; color: var(--ink); }
+.catalog-card .actions { margin-top: auto; }
+.catalog-meta, .dataset-meta {
+  display: flex; gap: 12px; flex-wrap: wrap; color: var(--muted); font-size: .82rem; margin: 0 0 8px;
+}
+.catalog-domain {
+  background: #eef1f6; padding: 1px 8px; border-radius: 6px; font-weight: 600;
+}
+.tag-list { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0; }
+.tag {
+  font-size: .74rem; color: var(--brand-dark); background: #e8f0fb;
+  border: 1px solid #cfe0f6; padding: 1px 9px; border-radius: 999px;
+}
+
+/* ---- dataset detail page ---- */
+.dataset-view { margin-top: 16px; }
+.dataset-back { margin-bottom: 8px; }
+.dataset-body {
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 24px; box-shadow: var(--shadow);
+}
+.dataset-head h2 { margin: 0 0 8px; font-size: 1.35rem; }
+.dataset-desc { color: var(--ink); margin: 8px 0; }
+.dataset-section { margin-top: 24px; border-top: 1px solid var(--line); padding-top: 18px; }
+.dataset-section > h3 { margin: 0 0 10px; font-size: 1.05rem; }
+.usage-list { margin: 8px 0; padding-left: 20px; }
+.usage-list li { margin: 4px 0; }
+.preview-table { margin: 12px 0; }
+.preview-table h4 { margin: 0 0 6px; font-size: .9rem; color: var(--muted); }
+.table-scroll { overflow-x: auto; }
+.submission-list { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
+.submission-card {
+  display: flex; flex-direction: column; gap: 6px; padding: 12px 16px; background: #fbfcfe;
+}
+.submission-head { display: flex; align-items: center; gap: 12px; }
+.submission-head strong { flex: 1; }
+.submission-card .role-pill { background: #eef1f6; border: 1px solid var(--line); color: var(--muted); }
+.submission-meta {
+  display: flex; gap: 14px; flex-wrap: wrap; margin: 0; color: var(--muted); font-size: .85rem;
+}
+.submission-report { margin: 4px 0 0; white-space: pre-wrap; }
+/* 承認済みの提出物ステータス(#26 の審査で submitted -> approved に遷移) */
+.submission-card .role-pill.approved {
+  background: #f3faf3; border-color: #c5e1c5; color: var(--green); font-weight: 700;
+}
+
+/* ---- 提出物審査ビュー(owner 限定, #26) ---- */
+.review-guard-note { color: var(--raw); }
+.review-panel {
+  margin-top: 16px; padding: 18px; border: 1px solid var(--brand);
+  border-radius: var(--radius); background: #f7f9fd;
+}
+.review-panel > h3 { margin-top: 0; }
+.review-report {
+  margin: 10px 0; padding: 12px 14px; border-left: 3px solid var(--brand);
+  background: #fff; border-radius: 0 8px 8px 0;
+}
+.review-report h4 { margin: 0 0 6px; font-size: .9rem; color: var(--muted); }
+.review-callout {
+  background: #f3faf3; border: 1px solid #c5e1c5; border-radius: var(--radius);
+  padding: 12px 14px; font-size: .9rem; margin: 6px 0 0;
+}
+.review-callout strong { color: var(--green); }
+
+/* 提出物の登録ブロック(分析ワークベンチ内, #25) */
+.submit-block {
+  margin-top: 18px; padding: 16px; border: 1px solid var(--line); border-radius: 10px;
+  background: #fbfcfe;
+}
+.submit-block h3 { margin: 0 0 6px; }
+.submit-block textarea { width: 100%; box-sizing: border-box; }
+.submit-hint { color: var(--muted); font-size: .9rem; }
+.submit-hint a { color: var(--brand); }
 
 .site-foot { text-align: center; color: var(--muted); font-size: .82rem; padding: 20px; }
 .site-foot a { color: var(--brand); }

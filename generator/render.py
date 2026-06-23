@@ -1,11 +1,16 @@
 """分析結果を HTML フラグメントへ事前レンダリングする。
 
-生データ・合成データそれぞれに 3 分析を適用し、Jinja2 で HTML フラグメントを
+各データセットの生/合成データに 3 分析を適用し、Jinja2 で HTML フラグメントを
 生成して site/fragments/ 配下に書き出す。フラグメントは htmx が hx-get で
 読み込むことを想定したマークアップ(本番 FastAPI のエンドポイント応答と同形)。
 
-  site/fragments/analyst/<analysis>.html  <- 合成データ(synthetic)の結果
-  site/fragments/owner/<analysis>.html     <- 生データ(raw)の結果
+  site/fragments/<dataset_id>/analyst/<analysis>.html  <- 合成データ(synthetic)の結果
+  site/fragments/<dataset_id>/owner/<analysis>.html     <- 生データ(raw)の結果
+
+後方互換(重要, Issue #22): 既存の前立腺がん PSA データセット(prostate-psa)は、
+旧パス site/fragments/{analyst,owner}/<analysis>.html も従来どおり生成する。
+PF-1(#21) のログインシェル内の既存デモ・E2E が旧パスを参照しているため。
+旧→新パス移行は後続 Issue(#23/#25/#26) で行う前提。
 
 Chart.js の設定は Python 側で組み立てて JSON として埋め込み、フラグメント内の
 小さな初期化スクリプトが描画する(テンプレートを薄く保つ)。
@@ -19,6 +24,7 @@ from pathlib import Path
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from generator import analyses
+from generator.generate_data import DATASETS
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT / "site" / "data"
@@ -180,20 +186,26 @@ def _build_env() -> Environment:
     )
 
 
-def render_all() -> None:
-    env = _build_env()
-    template = env.get_template("fragment.html.j2")
+# kind(synthetic/raw) -> フラグメント出力サブディレクトリ名
+KIND_SUBDIR = {"synthetic": "analyst", "raw": "owner"}
 
-    datasets = {
-        "synthetic": json.loads((DATA_DIR / "synthetic.json").read_text("utf-8")),
-        "raw": json.loads((DATA_DIR / "raw.json").read_text("utf-8")),
+
+def _render_dataset(template, dataset_id: str, legacy_paths: bool) -> None:
+    """1 データセット分の analyst/owner × 3分析フラグメントを生成する。"""
+    ds_data = {
+        "synthetic": json.loads((DATA_DIR / dataset_id / "synthetic.json").read_text("utf-8")),
+        "raw": json.loads((DATA_DIR / dataset_id / "raw.json").read_text("utf-8")),
     }
-    # kind -> 出力サブディレクトリ
-    kind_dir = {"synthetic": FRAG_DIR / "analyst", "raw": FRAG_DIR / "owner"}
+    for kind, data in ds_data.items():
+        sub = KIND_SUBDIR[kind]
+        # 新パス: site/fragments/<dataset_id>/<sub>/
+        outdirs = [FRAG_DIR / dataset_id / sub]
+        # 旧パス互換(prostate-psa のみ): site/fragments/<sub>/
+        if legacy_paths:
+            outdirs.append(FRAG_DIR / sub)
+        for outdir in outdirs:
+            outdir.mkdir(parents=True, exist_ok=True)
 
-    for kind, data in datasets.items():
-        outdir = kind_dir[kind]
-        outdir.mkdir(parents=True, exist_ok=True)
         for name, fn in analyses.ANALYSES.items():
             result = fn(data)
             chart = CHART_BUILDERS[name](result)
@@ -208,8 +220,18 @@ def render_all() -> None:
                 chart_config=json.dumps(chart, ensure_ascii=False),
                 code=CODE_SNIPPETS[name],
             )
-            (outdir / f"{name}.html").write_text(html, encoding="utf-8")
-            print(f"  wrote {(outdir / f'{name}.html').relative_to(ROOT)}")
+            for outdir in outdirs:
+                out = outdir / f"{name}.html"
+                out.write_text(html, encoding="utf-8")
+                print(f"  wrote {out.relative_to(ROOT)}")
+
+
+def render_all() -> None:
+    env = _build_env()
+    template = env.get_template("fragment.html.j2")
+
+    for ds in DATASETS:
+        _render_dataset(template, ds.dataset_id, ds.legacy_paths)
 
 
 if __name__ == "__main__":
