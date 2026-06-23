@@ -7,9 +7,10 @@
   2. association: 投薬(用量) と PSA 低下量の関連分析 (単回帰)
   3. survival  : 進行イベントまでの Kaplan-Meier 生存時間分析
 """
+
 from __future__ import annotations
 
-from collections import defaultdict
+from typing import cast
 
 import numpy as np
 import pandas as pd
@@ -54,9 +55,14 @@ def _per_patient_features(psa: pd.DataFrame) -> pd.DataFrame:
             late_slope = 0.0
         variability = float(np.std(psa_vals))
         rows.append(
-            dict(patient_id=pid, baseline=baseline, nadir=nadir,
-                 time_to_nadir=time_to_nadir, late_slope=late_slope,
-                 variability=variability)
+            dict(
+                patient_id=pid,
+                baseline=baseline,
+                nadir=nadir,
+                time_to_nadir=time_to_nadir,
+                late_slope=late_slope,
+                variability=variability,
+            )
         )
     return pd.DataFrame(rows)
 
@@ -75,8 +81,7 @@ def clustering(data: dict) -> dict:
     feats["cluster"] = labels
 
     # late_slope の平均で responder / partial / progressor を解釈付けする
-    order = (feats.groupby("cluster")["late_slope"].mean()
-             .sort_values().index.tolist())
+    order = feats.groupby("cluster")["late_slope"].mean().sort_values().index.tolist()
     names = {order[0]: "responder", order[1]: "partial", order[2]: "progressor"}
     feats["label"] = feats["cluster"].map(names)
 
@@ -93,8 +98,10 @@ def clustering(data: dict) -> dict:
 
     sizes = feats["label"].value_counts().to_dict()
     centroids = {
-        names[c]: {col: round(float(v), 2)
-                   for col, v in zip(feature_cols, km.cluster_centers_[c])}
+        names[c]: {
+            col: round(float(v), 2)
+            for col, v in zip(feature_cols, km.cluster_centers_[c], strict=True)
+        }
         for c in range(N_CLUSTERS)
     }
     return dict(
@@ -122,13 +129,16 @@ def association(data: dict) -> dict:
     # 薬剤別の PSA 低下率サマリ
     by_drug = []
     for drug, g in merged.groupby("drug"):
-        by_drug.append(dict(
-            drug=drug, n=int(len(g)),
-            mean_reduction_pct=round(float(g["reduction_pct"].mean()), 1),
-            sd_reduction_pct=round(float(g["reduction_pct"].std(ddof=0)), 1),
-            mean_dose_mg=round(float(g["dose_mg"].mean()), 1),
-        ))
-    by_drug.sort(key=lambda r: -r["mean_reduction_pct"])
+        by_drug.append(
+            dict(
+                drug=drug,
+                n=int(len(g)),
+                mean_reduction_pct=round(float(g["reduction_pct"].mean()), 1),
+                sd_reduction_pct=round(float(g["reduction_pct"].std(ddof=0)), 1),
+                mean_dose_mg=round(float(g["dose_mg"].mean()), 1),
+            )
+        )
+    by_drug.sort(key=lambda r: -cast(float, r["mean_reduction_pct"]))
 
     # 用量 vs 低下率 の単回帰
     x = merged["dose_mg"].to_numpy(dtype=float)
@@ -144,8 +154,7 @@ def association(data: dict) -> dict:
     idx = np.arange(len(x))
     if len(idx) > 120:
         idx = np.sort(rng.choice(idx, 120, replace=False))
-    points = [dict(dose=round(float(x[i]), 1), reduction=round(float(y[i]), 1))
-              for i in idx]
+    points = [dict(dose=round(float(x[i]), 1), reduction=round(float(y[i]), 1)) for i in idx]
 
     xs = [float(x.min()), float(x.max())]
     return dict(
@@ -156,8 +165,7 @@ def association(data: dict) -> dict:
             slope=round(float(slope), 4),
             intercept=round(float(intercept), 2),
             r2=round(float(r2), 3),
-            line=[dict(dose=round(xv, 1), reduction=round(slope * xv + intercept, 1))
-                  for xv in xs],
+            line=[dict(dose=round(xv, 1), reduction=round(slope * xv + intercept, 1)) for xv in xs],
         ),
         points=points,
     )
@@ -195,7 +203,7 @@ def _km_curve(times: np.ndarray, observed: np.ndarray):
         mask = times == ut
         d = int(observed[mask].sum())  # そのtime点でのイベント数
         if at_risk > 0 and d > 0:
-            s *= (1.0 - d / at_risk)
+            s *= 1.0 - d / at_risk
             curve.append(dict(t=round(float(ut), 1), s=round(float(s), 4)))
         at_risk -= int(mask.sum())
     return curve
@@ -203,8 +211,7 @@ def _km_curve(times: np.ndarray, observed: np.ndarray):
 
 def survival(data: dict) -> dict:
     patients, psa, _ = _frames(data)
-    tte = _time_to_event(psa).merge(patients[["patient_id", "risk_group"]],
-                                    on="patient_id")
+    tte = _time_to_event(psa).merge(patients[["patient_id", "risk_group"]], on="patient_id")
 
     curves, summary = {}, []
     for risk in ["low", "intermediate", "high"]:
@@ -216,12 +223,15 @@ def survival(data: dict) -> dict:
         n_events = int(g["observed"].sum())
         # イベントを起こした患者の進行までの月数中央値
         ev = g[g["observed"] == 1]["time"]
-        summary.append(dict(
-            risk_group=risk, n=int(len(g)), n_events=n_events,
-            event_rate_pct=round(100.0 * n_events / len(g), 1),
-            median_months_to_event=(round(float(ev.median()), 1)
-                                    if len(ev) else None),
-        ))
+        summary.append(
+            dict(
+                risk_group=risk,
+                n=int(len(g)),
+                n_events=n_events,
+                event_rate_pct=round(100.0 * n_events / len(g), 1),
+                median_months_to_event=(round(float(ev.median()), 1) if len(ev) else None),
+            )
+        )
 
     return dict(
         analysis="survival",

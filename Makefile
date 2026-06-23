@@ -6,7 +6,8 @@
 # serve    : site/ をローカル配信してブラウザ確認
 # clean    : 生成物を削除
 
-PY ?= python3
+# 実行は uv 経由（python3/python の環境差を uv が吸収）。uv 無しなら `make PY=python3` 等で上書き可。
+PY ?= uv run python
 SITE := site
 
 .PHONY: build generate analyze serve clean

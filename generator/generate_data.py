@@ -12,6 +12,7 @@
 これがデモの核となるメッセージ(「合成データで開発したコードを生データに適用する
 ステップに価値がある」)を成立させる。
 """
+
 from __future__ import annotations
 
 import json
@@ -45,19 +46,37 @@ class Profile:
 def _risk_params(risk: str, shift: float) -> dict:
     """リスク群ごとの臨床パラメータ。shift で synthetic を僅かにずらす。"""
     base = {
-        "low": dict(baseline=8.0, baseline_sd=2.0, nadir_frac=0.18,
-                    decay_months=6.0, progression_p=0.10, rise_rate=0.30),
-        "intermediate": dict(baseline=20.0, baseline_sd=6.0, nadir_frac=0.26,
-                             decay_months=7.5, progression_p=0.30, rise_rate=0.55),
-        "high": dict(baseline=45.0, baseline_sd=15.0, nadir_frac=0.34,
-                     decay_months=9.0, progression_p=0.60, rise_rate=0.90),
+        "low": dict(
+            baseline=8.0,
+            baseline_sd=2.0,
+            nadir_frac=0.18,
+            decay_months=6.0,
+            progression_p=0.10,
+            rise_rate=0.30,
+        ),
+        "intermediate": dict(
+            baseline=20.0,
+            baseline_sd=6.0,
+            nadir_frac=0.26,
+            decay_months=7.5,
+            progression_p=0.30,
+            rise_rate=0.55,
+        ),
+        "high": dict(
+            baseline=45.0,
+            baseline_sd=15.0,
+            nadir_frac=0.34,
+            decay_months=9.0,
+            progression_p=0.60,
+            rise_rate=0.90,
+        ),
     }[risk]
     p = dict(base)
     # shift: baseline をやや上げ、進行確率と再上昇速度をやや上げる
-    p["baseline"] *= (1.0 + 0.06 * shift)
+    p["baseline"] *= 1.0 + 0.06 * shift
     p["progression_p"] = min(0.95, p["progression_p"] + 0.05 * shift)
-    p["rise_rate"] *= (1.0 + 0.10 * shift)
-    p["decay_months"] *= (1.0 - 0.04 * shift)
+    p["rise_rate"] *= 1.0 + 0.10 * shift
+    p["decay_months"] *= 1.0 - 0.04 * shift
     return p
 
 
@@ -77,8 +96,7 @@ def _generate(profile: Profile) -> dict:
         enroll = study_start + timedelta(days=int(rng.integers(0, 540)))
 
         patients.append(
-            dict(patient_id=pid, age=age, risk_group=risk,
-                 enrollment_date=enroll.isoformat())
+            dict(patient_id=pid, age=age, risk_group=risk, enrollment_date=enroll.isoformat())
         )
 
         # ADT 開始(登録から数日〜数週間後)
@@ -88,8 +106,12 @@ def _generate(profile: Profile) -> dict:
         dose = round(float(dose * rng.choice([0.5, 1.0, 1.5], p=[0.2, 0.6, 0.2])), 1)
         adt_start = enroll + timedelta(days=int(rng.integers(3, 21)))
         med_rows.append(
-            dict(patient_id=pid, datetime=adt_start.isoformat() + "T09:00:00",
-                 drug=drug, dose_mg=dose)
+            dict(
+                patient_id=pid,
+                datetime=adt_start.isoformat() + "T09:00:00",
+                drug=drug,
+                dose_mg=dose,
+            )
         )
 
         baseline = max(1.0, rng.normal(rp["baseline"], rp["baseline_sd"]))
@@ -118,8 +140,7 @@ def _generate(profile: Profile) -> dict:
                 value = nadir + rise_rate * months_rising
             value = max(0.01, value + rng.normal(0, noise_sd))
             psa_rows.append(
-                dict(patient_id=pid, date=obs_date.isoformat(),
-                     psa=round(float(value), 2))
+                dict(patient_id=pid, date=obs_date.isoformat(), psa=round(float(value), 2))
             )
 
     return dict(
@@ -148,8 +169,10 @@ def build() -> None:
         out = OUT_DIR / f"{prof.name}.json"
         out.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
         n_psa = len(data["psa_measurements"])
-        print(f"  wrote {out.relative_to(OUT_DIR.parent.parent)}  "
-              f"({prof.n_patients} patients, {n_psa} PSA rows)")
+        print(
+            f"  wrote {out.relative_to(OUT_DIR.parent.parent)}  "
+            f"({prof.n_patients} patients, {n_psa} PSA rows)"
+        )
 
 
 if __name__ == "__main__":
