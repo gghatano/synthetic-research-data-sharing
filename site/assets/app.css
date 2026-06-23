@@ -328,6 +328,28 @@ button.ghost {
   display: flex; gap: 14px; flex-wrap: wrap; margin: 0; color: var(--muted); font-size: .85rem;
 }
 .submission-report { margin: 4px 0 0; white-space: pre-wrap; }
+/* 承認済みの提出物ステータス(#26 の審査で submitted -> approved に遷移) */
+.submission-card .role-pill.approved {
+  background: #f3faf3; border-color: #c5e1c5; color: var(--green); font-weight: 700;
+}
+
+/* ---- 提出物審査ビュー(owner 限定, #26) ---- */
+.review-guard-note { color: var(--raw); }
+.review-panel {
+  margin-top: 16px; padding: 18px; border: 1px solid var(--brand);
+  border-radius: var(--radius); background: #f7f9fd;
+}
+.review-panel > h3 { margin-top: 0; }
+.review-report {
+  margin: 10px 0; padding: 12px 14px; border-left: 3px solid var(--brand);
+  background: #fff; border-radius: 0 8px 8px 0;
+}
+.review-report h4 { margin: 0 0 6px; font-size: .9rem; color: var(--muted); }
+.review-callout {
+  background: #f3faf3; border: 1px solid #c5e1c5; border-radius: var(--radius);
+  padding: 12px 14px; font-size: .9rem; margin: 6px 0 0;
+}
+.review-callout strong { color: var(--green); }
 
 /* 提出物の登録ブロック(分析ワークベンチ内, #25) */
 .submit-block {
