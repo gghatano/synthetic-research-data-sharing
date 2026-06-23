@@ -14,7 +14,7 @@ tools: Read, Grep, Glob, Bash
    （Status / Summary / Changes / Verification / Review / Out of Scope Findings / Remaining Work）
 
 ## 手順
-1. `git diff main...HEAD` と `git log` で実際の変更を確認する（事実に基づく。誇張しない）
+1. `git diff develop...HEAD` と `git log` で実際の変更を確認する（事実に基づく。誇張しない）
 2. 検証コマンドの実出力を要約する（未実行のものは「未実行」と書く）
 3. Issue 本文の完了条件と突き合わせ、満たした項目・残項目を明記する
 
