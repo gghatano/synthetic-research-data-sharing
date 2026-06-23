@@ -79,8 +79,9 @@ htmx 用マークアップ（`generator/templates/`）と Python 分析コード
 
 ## デプロイ
 
-`develop`（既定ブランチ）への push で GitHub Actions（`.github/workflows/deploy.yml`）が
-`make build` を実行し、`site/` を GitHub Pages に公開します。リポジトリの
-**Settings → Pages → Source** を **GitHub Actions** に設定してください。
+開発は `develop`（統合・既定ブランチ）で行い、**リリース時に `develop` → `main` へマージ**します。
+`main` への push で GitHub Actions（`.github/workflows/deploy.yml`）が `make build` を実行し、
+`site/` を GitHub Pages に公開します。リポジトリの **Settings → Pages → Source** を
+**GitHub Actions** に設定してください。
 
 > 注: ここで扱うデータはすべて合成（架空）であり、実在の患者データではありません。
