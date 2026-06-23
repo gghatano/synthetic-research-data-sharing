@@ -1207,6 +1207,56 @@
       };
     }
 
+    // 同一データセットページには「旧ワークベンチ系の結果/審査領域」と
+    // 「新・提出物審査領域」の 2 系統が x-show で共存する。各フラグメント内の
+    // canvas id は chart-{kind}-{analysis}(例 chart-synthetic-clustering)で
+    // データセット非依存・コンテナ非依存のため、同一 analysis を両系統で同時に
+    // 開くと同 id の canvas がドキュメント内に 2 つ存在し、Chart.js の描画/destroy()
+    // が片方を壊す(核メッセージの「合成 vs 生の並置」が崩れる)。
+    //
+    // これを防ぐため、一方の結果/審査領域を開くときに他方の結果/審査領域を
+    // クリア(Chart 破棄 + innerHTML 空)して相互排他にする。クリア対象は
+    // 「フラグメントを読み込む pane の id」で指定する。
+    function clearResultPane(paneId, placeholderHTML) {
+      const pane = document.getElementById(paneId);
+      if (!pane) return;
+      // pane 配下の canvas に紐づく Chart を破棄してから DOM を捨てる
+      // (destroy せずに innerHTML を消すと Chart インスタンスが浮いて
+      //  以後の getChart(同 id) が古い参照を返す恐れがある)。
+      if (typeof Chart !== "undefined") {
+        pane.querySelectorAll("canvas").forEach((c) => {
+          const existing = Chart.getChart(c);
+          if (existing) existing.destroy();
+        });
+      }
+      pane.innerHTML = placeholderHTML || "";
+    }
+
+    // 旧ワークベンチ系(②分析結果 / ③審査の左右)を閉じる。
+    function clearWorkbenchPanes() {
+      clearResultPane(
+        "analyst-result",
+        '<p class="placeholder">上のボタンから分析を選ぶと、合成データでの結果が' +
+          "ここに読み込まれます。</p>"
+      );
+      clearResultPane("review-synthetic", "");
+      clearResultPane(
+        "review-raw",
+        '<p class="placeholder">「承認して生データに適用」を押すと、同一コードを' +
+          "生データで実行した結果がここに表示されます。</p>"
+      );
+    }
+
+    // 新・提出物審査系(③ #sub-review-*)を閉じる。
+    function clearSubReviewPanes() {
+      clearResultPane("sub-review-synthetic", "");
+      clearResultPane(
+        "sub-review-raw",
+        '<p class="placeholder">「承認して生データに適用」を押すと、同一分析を' +
+          "生データで実行した結果がここに表示されます。</p>"
+      );
+    }
+
     // 提出物審査パネル(#26, owner 限定)。個別ページ(datasetPage)配下にネストされ、
     // 親スコープの dataset / submissions() を参照する(Alpine はスコープを継承する)。
     // 一覧の各カードから提出物を選ぶ → 合成結果を読み込み、承認で生データ結果を並置し、
@@ -1235,6 +1285,9 @@
         // 既に承認済みなら生データ結果も復元表示する(再度開いても並置を維持)。
         openReview(s) {
           if (!this.canReview()) return;
+          // 相互排他: 旧ワークベンチ系の結果/審査領域を閉じ、同一 chart-{kind}-{analysis}
+          // canvas がドキュメント内に重複しない状態にしてから審査領域へ読み込む。
+          this.closeWorkbench();
           this.reviewingId = s.id;
           const base = this.fragBase;
           htmx.ajax("GET", "fragments/" + base + "/analyst/" + s.analysis + ".html",
@@ -1246,6 +1299,22 @@
         },
         closeReview() {
           this.reviewingId = null;
+          clearSubReviewPanes();
+        },
+        // 旧ワークベンチ系の結果/審査領域を閉じる(相互排他)。pane の DOM をクリア
+        // し、ワークベンチ(workflow)コンポーネントの状態も初期化して、再表示時に
+        // 「読込済みなのに pane が空」という不整合や canvas id 重複を避ける。
+        closeWorkbench() {
+          clearWorkbenchPanes();
+          const wb = document.querySelector("[data-testid='workbench']");
+          if (wb && window.Alpine) {
+            const d = Alpine.$data(wb);
+            if (d) {
+              d.loaded = false;
+              d.selected = null;
+              if (d.role === "review") d.role = "analyze";
+            }
+          }
         },
         // 承認: 同一分析を生データに適用した結果(owner フラグメント)を右に読み込み、
         // 共有ストアの status を approved に遷移させる(一覧の submission-status に反映)。
@@ -1295,7 +1364,18 @@
         publish() {
           if (this.phase === "idle") this.phase = "published";
         },
+        // 相互排他: 新・提出物審査領域(#sub-review-*)を閉じ、同一
+        // chart-{kind}-{analysis} canvas の重複を防いでから旧ワークベンチへ読み込む。
+        closeSubReview() {
+          clearSubReviewPanes();
+          const panel = document.querySelector("[data-testid='dataset-submissions']");
+          if (panel && window.Alpine) {
+            const d = Alpine.$data(panel);
+            if (d) d.reviewingId = null;
+          }
+        },
         pick(analysis) {
+          this.closeSubReview();
           this.selected = analysis;
           this.loaded = false;
           // 分析を切り替えたら提出フォームの状態(レポート/メッセージ)を初期化する。
@@ -1351,6 +1431,7 @@
         },
         enterReview() {
           if (this.phaseRank() < 2) return;
+          this.closeSubReview();
           this.role = "review";
           // 提出された合成データ結果を審査タブの左に読み込む
           htmx.ajax("GET", "fragments/" + this.fragBase + "/analyst/" +

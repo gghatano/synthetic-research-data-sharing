@@ -179,6 +179,10 @@ FastAPI のエンドポイントに置き換わるだけで、フロント側の
   フラグメントとして出力
 - 状態遷移: Alpine.js で `idle→published→submitted→approved` を管理。htmx は
   `fragments/{analyst,owner}/<analysis>.html` を `hx-get` で読み込む
+- セキュリティ上の注意: モックでは `site/data/<id>/raw.json` および owner（生データ）
+  フラグメントも GitHub Pages から実際に配信される（データは架空ゆえ許容）。本番では
+  生データ実体・生データ結果・`catalog.json` の `paths.raw` を公開成果物に含めず TRE 内に
+  隔離する。
 
 ## 7. 本番想定アーキテクチャ（FastAPI + htmx）との対応
 
