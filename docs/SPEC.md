@@ -225,6 +225,72 @@ FastAPI のエンドポイントに置き換わるだけで、フロント側の
 | 状態保持 | Alpine 共有ストア（in-memory） | サーバーセッション + DB |
 | 認可・ロールガード | クライアント側の出し分け（UX 用） | サーバー側で強制（TRE 隔離） |
 
+## 7.6 データカタログ閲覧（一覧・個別ページ, #23）
+
+カタログ型プラットフォームの**閲覧（読み取り）機能**。誰でも研究用データの
+**メタデータ・ダミーデータ・活用例**を確認できる。供給源は PF-2（#22）が事前生成する
+`site/data/catalog.json`。ビューは `site/index.html` の Alpine ストア
+`Alpine.store('session').view` に追加した `explore`（一覧）/`dataset`（個別）で切り替える。
+
+### 公開閲覧（ログイン不要）
+
+- カタログ一覧（`explore`）・個別ページ（`dataset`）は**誰でも閲覧可**。擬似ガード
+  （`isPublicView`）の対象外とし、未ログインでもアプリバーの「ログイン」やログイン画面の
+  「ログインせずカタログを見る」から到達できる。
+- 保護ビュー（`top` / `register`）は従来どおり擬似ガードの対象（未ログインはログインへ、
+  `analyst` の `register` 到達はトップへ戻す）。
+
+### カタログ一覧（`explore`）
+
+- `data/catalog.json` を `fetch` し、`datasets[]` を**カード**で描画
+  （title / owner / domain / n_patients / description / tags）。
+- 簡易検索（最小実装）: タイトル・概要・オーナー・ドメイン・タグの部分一致で絞り込む。
+  件数表示（`<絞込数> / <総数> 件`）を添える。一致 0 件は空状態を表示。
+- 各カードの「詳細を見る」で個別ページへ（`openDataset(dataset_id)`）。
+
+### データ個別ページ（`dataset`）
+
+選択中の `currentDatasetId` に対応する `catalog.json` のエントリを描画する。
+
+- **メタデータ**: title / owner / domain / n_patients / description / tags。
+- **活用例**: `usage_examples` を箇条書き表示。
+- **ダミーデータプレビュー**: `dummy_preview` の各テーブル（patients / psa_measurements /
+  medications）を列順固定のテーブルで表示。これは**合成データ由来**であり生データは含まない。
+- **合成データ分析の導線**: 「分析ワークベンチを開く」で、既存 3 ロールデモ（§4 の
+  `idle→published→submitted→approved`）を**個別ページ配下に内包**して開く。フラグメントの
+  パス基底は選択中データセット（`dataset_id`）に追従する
+  （`fragments/<dataset_id>/{analyst,owner}/<analysis>.html` を `htmx.ajax` で取得）。
+  既存デモのマークアップ・`data-analysis` 属性・canvas id は不変（E2E 互換）。
+- **紐づく提出物の枠**: 下記の共有ストアから `dataset_id` で引いた提出物を一覧表示する。
+  #23 時点では常に空（空状態プレースホルダのみ）。
+
+### 提出物の共有ストア（枠のみ。#25/#26 への引き継ぎ）
+
+提出物は **Alpine 共有ストア `Alpine.store('submissions')`（in-memory）** で保持する。
+**キー設計は `dataset_id` 起点**（`catalog.json` / パス規約と一致）。
+
+```
+Alpine.store('submissions') = {
+  byDataset: { [dataset_id]: Submission[] },  // dataset_id を起点キーにする
+  forDataset(dataset_id) -> Submission[],      // 読み取り(個別ページが使用)
+  add(dataset_id, submission)                  // #25 が書き込む想定の足場
+}
+```
+
+- 個別ページの「紐づく提出物」は `forDataset(dataset_id)` を読むだけ（#23 は読み取り専用）。
+- 提出（#25）・審査（#26）は `add()` 経由で `byDataset[dataset_id]` に積む。各 `Submission` の
+  想定形は `{ id, datasetId, analysis, analyst, status, submittedAt, ... }`（#25 で確定）。
+- `localStorage` 不使用（ハードリロードでリセット = 既存デモと同じ思想）。
+
+### 本番との対応
+
+| 関心事 | モック（本リポジトリ） | 本番プロトタイプ |
+|--------|------------------------|------------------|
+| カタログ供給 | 事前生成 `catalog.json` を `fetch` | カタログ API（DB 検索） |
+| ダミーデータ | `dummy_preview`（合成データ抽出） | 合成データのサンプル応答 |
+| 分析フラグメント | `htmx.ajax` で静的 `.html` | FastAPI が同形 HTML を返す |
+| 提出物 | Alpine 共有ストア（in-memory） | サーバー側ジョブ状態 + DB |
+
 ## 8. 合成データ生成方針（mockdata-generator の思想）
 
 `gghatano/mockdata-generator` の仕様駆動アプローチ（source → generator → synthetic +
