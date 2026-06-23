@@ -10,37 +10,43 @@
 - 本番は FastAPI + htmx を想定するが**このリポジトリには存在しない**。`generator/analyses.py` と
   `generator/templates/` を将来そのまま移植する設計、という制約だけ守る。
 
+## ツール: uv
+
+依存・実行・検証はすべて **uv** 経由（`python3`/`python` の環境差を uv が吸収する）。
+依存の単一の真実は `pyproject.toml`（`[project].dependencies` と `[dependency-groups].dev`）。
+ランタイムは `.python-version`（3.12）で固定。`requirements*.txt` は使わない。
+
 ## 開発コマンド
 
 | 目的 | コマンド |
 |------|----------|
-| データ生成 | `make generate PY=python` |
-| フラグメント生成 | `make analyze PY=python` |
-| 全ビルド | `make build PY=python` |
-| ローカル配信 | `make serve PY=python`（http://localhost:8000/） |
+| 環境同期（初回/依存変更時） | `uv sync` |
+| データ生成 | `uv run python -m generator.generate_data` |
+| フラグメント生成 | `uv run python -m generator.render` |
+| 全ビルド | `make build`（内部で `uv run python` を使用） |
+| ローカル配信 | `make serve`（http://localhost:8000/） |
 | 生成物削除 | `make clean` |
-| アプリ依存 | `python -m pip install -r requirements.txt` |
-| 開発依存 | `python -m pip install -r requirements-dev.txt` |
+| 依存を1つ追加 | `uv add <pkg>` / dev は `uv add --dev <pkg>` |
 
-> **重要（環境差）**: この環境の Python は `python` で起動する（`python3` は存在しない）。
-> Makefile の既定は `python3` なので、ローカルでは必ず **`PY=python`** を付ける。CI(ubuntu)は素の `make build`。
+> `make` が無い環境では `uv run python -m generator.generate_data && uv run python -m generator.render` で代替可。
 
 ## 検証コマンド（変更完了時に必ず実行）
 
 | 種別 | コマンド |
 |------|----------|
-| テスト | `python -m pytest -q` |
-| lint | `python -m ruff check .` |
-| format（確認） | `python -m ruff format --check .` |
-| format（適用） | `python -m ruff format .` |
-| 型チェック | `python -m mypy generator` |
-| 再現性スモーク | `make build PY=python` が site/data/*.json と site/fragments/**/*.html を生成 |
+| テスト | `uv run pytest -q` |
+| lint | `uv run ruff check .` |
+| format（確認） | `uv run ruff format --check .` |
+| format（適用） | `uv run ruff format .` |
+| 型チェック | `uv run mypy generator` |
+| 再現性スモーク | `make build` が site/data/*.json と site/fragments/**/*.html を生成 |
 
 ## ブランチ・コミット・PR 方針
 
 - 既定ブランチで直接作業しない。`feature/<topic>` を切る。
 - 1 PR = 1 つの完結したタスク（implementation-plan の 1 項目）。差分は小さく。
 - コミット前に上記「検証コマンド」を通す。落ちたまま完了報告しない。
+- `uv.lock` はコミットする（再現可能な環境のため）。
 - コミットメッセージ末尾に `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`。
 
 ## 実装時の禁止事項

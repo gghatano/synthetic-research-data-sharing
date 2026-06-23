@@ -19,8 +19,8 @@ tools: Read, Grep, Glob, Edit, Write, Bash
 - フラグメント本体（site/fragments/）は生成物。直接編集せずテンプレ＋render.py を直す
 
 ## 完了前に必ず実行（出力を残す）
-1. `make build PY=python`（テンプレ変更を反映してフラグメント再生成）
-2. `python -m pytest -q` / `python -m ruff check .` / `python -m mypy generator`
-3. 可能なら `make serve PY=python` で 3 ロールの動作（公開→提出→承認→比較）を確認
+1. `make build`（テンプレ変更を反映してフラグメント再生成）
+2. `uv run pytest -q` / `uv run ruff check .` / `uv run mypy generator`
+3. 可能なら `make serve` で 3 ロールの動作（公開→提出→承認→比較）を確認
 
 検証出力・変更ファイル・残課題を報告する。

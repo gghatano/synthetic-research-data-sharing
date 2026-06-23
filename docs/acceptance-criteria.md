@@ -4,11 +4,11 @@
 
 ## 全タスク共通（Definition of Done）
 - [ ] 対象仕様（SPEC.md の節）を満たし、仮定があれば明記した
-- [ ] `python -m pytest -q` が緑
-- [ ] `python -m ruff check .` が無警告
-- [ ] `python -m ruff format --check .` が差分なし
-- [ ] `python -m mypy generator` がエラーなし
-- [ ] `make build PY=python` が site/data/*.json と site/fragments/**/*.html を生成
+- [ ] `uv run pytest -q` が緑
+- [ ] `uv run ruff check .` が無警告
+- [ ] `uv run ruff format --check .` が差分なし
+- [ ] `uv run mypy generator` がエラーなし
+- [ ] `make build` が site/data/*.json と site/fragments/**/*.html を生成
 - [ ] code-reviewer のレビューを通した（必要なら security-reviewer も）
 - [ ] 変更ファイル・検証出力・残課題・曖昧点を報告した
 
@@ -23,4 +23,4 @@
 
 ## 品質ゲート（ツール整備後）
 - [ ] CI（deploy.yml もしくは別 workflow）でテスト・lint・型チェックが実行される
-- [ ] 開発依存が requirements-dev.txt に固定され、`pyproject.toml` に設定がある
+- [ ] 依存は `pyproject.toml`（dev グループ含む）に集約され、`uv.lock` で固定されている

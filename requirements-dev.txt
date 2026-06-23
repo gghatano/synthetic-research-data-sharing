@@ -1,9 +1,0 @@
-# 開発・検証用の依存。アプリ実行には requirements.txt のみで足りる。
--r requirements.txt
-
-pytest>=8.0
-ruff>=0.5
-mypy>=1.10
-
-# mypy 用の型スタブ（pandas/sklearn は untyped 扱いで ignore_missing_imports）
-pandas-stubs>=2.0

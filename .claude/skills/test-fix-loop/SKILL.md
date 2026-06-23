@@ -6,9 +6,9 @@ description: テスト・lint・型チェックの失敗を分析し、修正し
 # Test / Fix Loop
 
 1. 失敗コマンドを単体で再実行し、**完全な出力**を取得する
-   - `python -m pytest -q`（失敗テストだけなら `python -m pytest path::test -x`）
-   - `python -m ruff check .` / `python -m ruff format --check .`
-   - `python -m mypy generator`
+   - `uv run pytest -q`（失敗テストだけなら `uv run pytest path::test -x`）
+   - `uv run ruff check .` / `uv run ruff format --check .`
+   - `uv run mypy generator`
 2. 失敗を分類する: テスト期待値の誤り / 実装バグ / 環境差 / 再現性崩れ
 3. 根本原因を 1〜2 行で言語化する（症状でなく原因）
 4. **最小の修正**を行う。テストを通すためだけに仕様を曲げない／アサートを緩めない
@@ -18,6 +18,6 @@ description: テスト・lint・型チェックの失敗を分析し、修正し
 
 ## 注意
 
-- `make build PY=python` を忘れない（生成物が古いままだと比較系テストが誤検知する）
+- `make build` を忘れない（生成物が古いままだと比較系テストが誤検知する）
 - 乱数起因の不安定さは「テストを緩める」前にシード固定の漏れを疑う
-- format 失敗は `python -m ruff format .` で自動修正してから差分を確認する
+- format 失敗は `uv run ruff format .` で自動修正してから差分を確認する

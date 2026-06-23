@@ -21,9 +21,9 @@ tools: Read, Grep, Glob, Edit, Write, Bash
 - 「合成 ≈ 生だが非同一」という核メッセージを壊す変更をしない
 
 ## 完了前に必ず実行（出力を残す）
-1. `python -m pytest -q`
-2. `python -m ruff check .` と `python -m ruff format --check .`
-3. `python -m mypy generator`
-4. `make build PY=python`（再現性スモーク）
+1. `uv run pytest -q`
+2. `uv run ruff check .` と `uv run ruff format --check .`
+3. `uv run mypy generator`
+4. `make build`（再現性スモーク）
 
 検証が緑になるまで完了としない。変更ファイル・検証出力・残課題を報告する。

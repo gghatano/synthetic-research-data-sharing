@@ -24,7 +24,7 @@
 ## 品質
 - [ ] 対応するテストが `tests/` に追加・更新されている
 - [ ] `pytest` / `ruff check` / `ruff format --check` / `mypy generator` が通る
-- [ ] `make build PY=python` が生成物を再生成できる
+- [ ] `make build` が生成物を再生成できる
 - [ ] 例外系・境界値（空グループ、欠損、単一観測など）が考慮されている
 
 ## セキュリティ / プライバシー

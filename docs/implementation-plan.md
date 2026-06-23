@@ -10,11 +10,12 @@ SPEC.md の機能（データ生成・3分析・HTMLレンダリング・3ロー
 
 ### 確認した主なギャップ / リスク
 1. **テストが皆無**。再現性・純関数性・出力スキーマ・核メッセージが回帰検知できない。
-2. **lint / format / typecheck の設定とツールが無い**（本計画整備で pyproject.toml と
-   requirements-dev.txt は追加済み。CI 反映と実運用は未）。
-3. **クロスプラットフォーム**: Makefile は `python3` 前提。ローカル(Windows)は `python` のみ。
-   現状は `make build PY=python` で回避可能だが、ドキュメント／CI と整合させたい。
-4. **CI は deploy のみ**。テスト・lint を通す品質ゲートが無い。
+2. **lint / format / typecheck は設定・実行可能になったが、既存コードに未解消の指摘がある**
+   （足場整備で uv プロジェクト化＋ruff/mypy 設定を追加。`uv run ruff check` で B905 等、
+   `uv run mypy generator` で `analyses.py` の型指摘が出る。解消は T5）。
+3. ~~クロスプラットフォーム（python3 前提）~~ → **uv 採用で解決済み**。`make` は `uv run python`
+   を使い、CI もローカルも同一手順。（T7 完了）
+4. **CI は deploy のみ**。テスト・lint を通す品質ゲートが無い（deploy も uv 化が必要）。
 5. 「合成 ≈ 生だが非同一」が**どこにも検証されていない**（デモの核心なのに保証なし）。
 
 > タスクは「1 PR = 1 完結単位」。各タスクは spec-implementation SKILL の手順で進め、
@@ -29,8 +30,8 @@ SPEC.md の機能（データ生成・3分析・HTMLレンダリング・3ロー
 - 変更対象: `tests/`（新規）, `tests/conftest.py`
 - 内容: 小さな n で生成したデータを供給するフィクスチャ。最初の 1 ケース（generate の再現性）
 - 想定テスト: 同一シードで `_generate` の出力が完全一致
-- 完了条件: `python -m pytest -q` が緑。CI でなくローカルで実行可能
-- リスク: 依存（numpy/pandas/sklearn）未インストール環境 → `requirements-dev.txt` を入れる手順を明記
+- 完了条件: `uv run pytest -q` が緑。CI でなくローカルで実行可能
+- リスク: 依存未取得環境 → `uv sync` で解決（pyproject の dev グループに pytest 等が入っている）
 
 ### T2. 分析の純関数性・出力スキーマのテスト
 - 対象仕様: SPEC §5（3分析の定義）
@@ -56,25 +57,23 @@ SPEC.md の機能（データ生成・3分析・HTMLレンダリング・3ロー
   （canvas#chart-*, cfg JSON, テーブル）を含む。autoescape が効いている
 - 依存: T1
 
-### T5. lint / format / typecheck の実運用化
-- 内容: `requirements-dev.txt` を入れて `ruff`/`mypy` を実行 → 既存コードの指摘を解消
-  （format 差分・import 整列・未使用・型注釈の最小補強）。**ロジックは変えない**（refactor-safely）
-- 完了条件: `ruff check`/`ruff format --check`/`mypy generator` がすべて緑
+### T5. lint / format / typecheck の指摘解消
+- 内容: 既存コードの ruff/mypy 指摘を解消（`analyses.py` の `zip(..., strict=)`、
+  `by_drug.sort` の型、format 差分・import 整列等）。**ロジック・数値・スキーマは変えない**
+  （refactor-safely）。生成物が変わらないことをゴールデン比較で確認
+- 完了条件: `uv run ruff check .`/`uv run ruff format --check .`/`uv run mypy generator` が緑
 - 依存: なし（T1 と並行可）
 
-### T6. CI に品質ゲートを追加
+### T6. CI に品質ゲートを追加（＋ deploy の uv 化）
 - 対象仕様: SPEC §9、運用方針
-- 変更対象: `.github/workflows/`（test 用 job 追加 or deploy の前段に test step）
-- 内容: push/PR で `pip install -r requirements-dev.txt` → pytest / ruff / mypy。
-  deploy は test 成功を needs にする
+- 変更対象: `.github/workflows/`（test job 追加、deploy も uv へ）
+- 内容: push/PR で `astral-sh/setup-uv` → `uv sync` → `uv run pytest / ruff / mypy`。
+  deploy job も `uv sync` → `make build` に統一し、test 成功を needs にする
 - 完了条件: CI が緑。テスト失敗時に deploy されない
 - 依存: T1〜T5
 
-### T7. クロスプラットフォーム整合（任意・小）
-- 内容: Makefile の Python 検出を改善（`PY ?= python3` のままドキュメントで `PY=python` を案内、
-  もしくは存在検出）。README / CLAUDE.md と齟齬が無いようにする
-- 完了条件: Windows ローカルと CI(ubuntu) の両方で `make build` 系が回る手順が明文化
-- 依存: なし
+### ~~T7. クロスプラットフォーム整合~~ → 足場整備で完了
+uv 採用により `python3`/`python` 差を解消。Makefile は `uv run python`、ローカル/CI 同一手順。
 
 ---
 

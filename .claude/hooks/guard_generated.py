@@ -5,6 +5,7 @@ site/data/ と site/fragments/ は `make build` の出力。手編集せず
 ジェネレータ（generator/）を直して再生成する方針を強制する。
 ブロック時は exit 2 で stderr にメッセージを返す（Claude に伝わる）。
 """
+
 from __future__ import annotations
 
 import json
@@ -27,7 +28,7 @@ def main() -> int:
         sys.stderr.write(
             "ブロック: " + path + " は make build の生成物です。手編集せず、"
             "generator/（generate_data.py / render.py / templates/）を直して "
-            "`make build PY=python` で再生成してください。\n"
+            "`make build` で再生成してください。\n"
         )
         return 2
     return 0

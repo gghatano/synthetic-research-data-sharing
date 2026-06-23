@@ -24,4 +24,4 @@ tools: Read, Grep, Glob, Edit, Write, Bash
 - テストを通すために仕様を曲げない・アサートを不当に緩めない
 - テスト追加・修正のみ。プロダクションコードのロジック変更は backend/frontend 担当に委ねる
 
-完了時: 追加したテスト一覧・`python -m pytest -q` の出力・カバーした性質を報告する。
+完了時: 追加したテスト一覧・`uv run pytest -q` の出力・カバーした性質を報告する。

@@ -4,6 +4,7 @@
 検出時は exit 2 で警告（Claude に伝わる）。誤検知を避けるためパターンは限定的。
 本デモのデータはすべて架空のため、鍵・トークン類の混入は原則あってはならない。
 """
+
 from __future__ import annotations
 
 import json
@@ -37,8 +38,11 @@ def main() -> int:
     hits = [name for name, pat in PATTERNS.items() if pat.search(text)]
     if hits:
         sys.stderr.write(
-            "警告: " + path + " に秘密情報らしき文字列を検出しました ("
-            + ", ".join(hits) + ")。コミット前に確認・除去してください。\n"
+            "警告: "
+            + path
+            + " に秘密情報らしき文字列を検出しました ("
+            + ", ".join(hits)
+            + ")。コミット前に確認・除去してください。\n"
         )
         return 2
     return 0

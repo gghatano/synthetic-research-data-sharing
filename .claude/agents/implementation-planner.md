@@ -14,7 +14,7 @@ tools: Read, Grep, Glob
 ## このリポジトリの前提
 - Python ジェネレータ（generator/）＋ 静的フロント（site/, CDN のみ, ビルド工程なし）
 - 本番 FastAPI はこのリポジトリに存在しない。移植容易性（純関数・テンプレ流用）は制約として保つ
-- 再現性が最重要（seed / RANDOM_STATE 固定）。比較系テストは `make build PY=python` 後に行う
+- 再現性が最重要（seed / RANDOM_STATE 固定）。比較系テストは `make build` 後に行う
 
 ## 制約
 - コードを編集しない。計画のみ返す

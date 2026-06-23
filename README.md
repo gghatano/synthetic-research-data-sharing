@@ -16,10 +16,13 @@
 ## デモを動かす
 
 ```bash
-pip install -r requirements.txt
+uv sync         # 依存を取得（pyproject.toml / .python-version に基づく）
 make build      # データ生成 + 3分析を適用して HTML フラグメントを生成
 make serve      # http://localhost:8000/ で確認
 ```
+
+> 依存・実行・検証は [uv](https://docs.astral.sh/uv/) 経由（`make` は内部で `uv run python` を使用）。
+> `make` が無ければ `uv run python -m generator.generate_data && uv run python -m generator.render`。
 
 `make serve` を開いたら、上部タブで 3 ロールを順に体験できます。
 
@@ -45,8 +48,9 @@ htmx 用マークアップ（`generator/templates/`）と Python 分析コード
 
 ```
 ├── docs/SPEC.md            # 仕様書（データモデル・フロー・分析定義・本番対応表）
-├── requirements.txt
-├── Makefile                # make build / make serve / make clean
+├── pyproject.toml          # 依存（[project] / dev グループ）+ ruff/mypy/pytest 設定
+├── .python-version         # uv が使う Python（3.12）
+├── Makefile                # make build / make serve / make clean（内部で uv run python）
 ├── generator/
 │   ├── generate_data.py    # 生・合成データ生成（シード固定で再現可能）
 │   ├── analyses.py         # 3分析（生/合成共通の純関数）
