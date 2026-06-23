@@ -368,6 +368,19 @@ button.ghost {
 .submit-hint { color: var(--muted); font-size: .9rem; }
 .submit-hint a { color: var(--brand); }
 
+/* プログラム＋結果アップロード提出フォーム(#41, N2) */
+.submit-upload { margin-top: 12px; }
+.submit-upload .field { margin-top: 12px; }
+.submit-upload textarea { width: 100%; box-sizing: border-box; }
+.submit-upload input[type="file"] { margin-top: 4px; font-size: .9rem; }
+.result-image-preview { margin: 8px 0 0; display: flex; align-items: center; gap: 10px; }
+.result-thumb {
+  max-width: 220px; max-height: 160px; border: 1px solid var(--line);
+  border-radius: 6px; background: #fff;
+}
+/* 提出物カードの結果件数バッジ */
+.submission-results { color: var(--muted); font-size: .82rem; }
+
 .site-foot { text-align: center; color: var(--muted); font-size: .82rem; padding: 20px; }
 .site-foot a { color: var(--brand); }
 

@@ -131,20 +131,28 @@
         },
       });
 
-      // 提出物の共有ストア(#25 が実紐付け / #26 が審査で読む)。
+      // 提出物の共有ストア(#41 が書き込み / #42 の審査が読む)。
       // キー設計: submissions.byDataset[dataset_id] = 提出物配列(in-memory)。
-      //   Submission スキーマ(#26 が読む前提の確定形):
+      //   Submission スキーマ(#41 で確定。アップロード型: プログラム＋結果):
       //     {
-      //       id: string,            // 一意 ID ("sub-<seq>")
-      //       datasetId: string,     // 対象データセット(= catalog.json の dataset_id)
-      //       analysis: string,      // 分析種別 ("clustering" | "association" | "survival")
-      //       analysisTitle: string, // 分析の表示名
-      //       analyst: string,       // 提出者(ログイン中の analyst 名)
-      //       report: string,        // レポート(所見/メモのテキスト)
-      //       codeExcerpt: string,   // 提出した分析の適用コード抜粋(フラグメント由来)
-      //       status: string,        // "submitted"(初期値。審査で遷移するのは #26)
-      //       submittedAt: string,   // ISO8601 文字列
+      //       id: string,          // 一意 ID ("sub-<seq>")
+      //       datasetId: string,   // 対象データセット(= catalog.json の dataset_id)
+      //       program: {           // アップロードした分析プログラム(実行しない。表示/保管のみ)
+      //         name: string,      //   ファイル名
+      //         text: string,      //   FileReader.readAsText で読んだソース文字列
+      //       },
+      //       results: [           // アップロードした結果(画像/テキスト。最低 1 件)
+      //         { type: "image", name: string, content: string(dataURL) } |
+      //         { type: "text",  name: string, content: string }
+      //       ],
+      //       report: string,      // 任意のレポート/メモ(所見・申し送り)
+      //       analyst: string,     // 提出者(ログイン中ユーザー名)
+      //       status: string,      // "submitted"(初期値。審査で approved へ遷移 = #42)
+      //       submittedAt: string, // ISO8601 文字列
+      //       // 審査(#42)で reviewedBy / reviewedAt を追記する。
       //     }
+      //   旧スキーマ(analysis/analysisTitle/codeExcerpt = 分析選択型)から、実際の
+      //   code-to-data に合わせ「合成データを持ち帰り外部開発→プログラム＋結果を提出」へ移行。
       //   dataset_id を起点キーにするのは catalog.json / パス規約と一致させるため。
       //   localStorage 不使用(ハードリロードでリセット = 既存デモと同じ思想)。
       Alpine.store("submissions", {
@@ -154,8 +162,8 @@
           return this.byDataset[datasetId] || [];
         },
         // 提出物を 1 件追加し、採番した id を含む保存済みオブジェクトを返す。
-        // 呼び出し側は analysis/analyst/report/codeExcerpt 等を渡す。id/status/
-        // submittedAt は未指定ならここで補完する(#26 の審査は status を後から書き換える)。
+        // 呼び出し側は program{name,text}/results[]/report/analyst を渡す(#41)。id/status/
+        // submittedAt は未指定ならここで補完する(#42 の審査は status を後から書き換える)。
         add(datasetId, submission) {
           if (!this.byDataset[datasetId]) this.byDataset[datasetId] = [];
           this.seq += 1;
@@ -619,234 +627,109 @@
             </div>
           </section>
 
-          <!-- 合成データ分析の導線 -->
-          <section class="dataset-section" data-testid="dataset-analysis-cta">
-            <h3>合成データで分析する</h3>
+          <!--
+            分析プログラム＋結果の提出(#41, N2)。ワークベンチ(ブラウザ内 3 分析実行)は廃止し、
+            実際の code-to-data に合わせて「合成データを手元に持ち帰り外部で開発 → プログラムと
+            結果(画像/テキスト)をアップロードして提出」へ置き換える。アップロードした
+            プログラムは一切実行せず、表示・保管のみ。保存は in-memory(Alpine 共有ストア)。
+          -->
+          <section class="dataset-section" data-testid="dataset-analysis-cta"
+                   x-data="submitForm()">
+            <h3>分析プログラム＋結果を提出する</h3>
 
             <!--
-              ユーザー登録分(擬似)は分析フラグメントが事前生成されていないため、
-              ワークベンチを出さず注記のみ表示する(#24 の仮定: 登録はメタデータ+ダミーのみ)。
+              ユーザー登録分(擬似)は合成データが未生成のため、ダウンロードも提出もできない。
+              注記のみ表示する(§7.7 の「分析未提供」と同じ扱い)。
             -->
-            <p class="placeholder" data-testid="dataset-no-workbench"
+            <p class="placeholder" data-testid="dataset-no-submission"
                x-show="isUserDataset" x-cloak>
               このデータセットは<strong>登録メタデータ＋ダミーデータのみ</strong>です
-              (合成データの分析フラグメントは未生成)。本番では TRE 内で合成データを生成・検証し、
-              ここに分析ワークベンチが現れます。</p>
+              (合成データ未生成)。本番では TRE 内で合成データを生成・検証し、ここに合成データの
+              ダウンロードと提出フォームが現れます。</p>
 
             <template x-if="!isUserDataset">
-            <div>
-            <p>このデータセットの<strong>合成データ</strong>で 3 分析(クラスタリング /
-              関連分析 / 生存時間分析)を実行し、オーナーへ提出する一連のワークフローを
-              体験できます。</p>
-            <div class="actions">
-              <button class="primary" data-testid="open-workbench"
-                      @click="showWorkbench = true"
-                      x-show="!showWorkbench">分析ワークベンチを開く →</button>
-              <button class="ghost" data-testid="close-workbench"
-                      @click="showWorkbench = false"
-                      x-show="showWorkbench">分析ワークベンチを閉じる</button>
-            </div>
+            <div class="submit-upload" data-testid="submit-form">
+              <p>上の「合成データのダウンロード」で合成データを手元に取得し、外部で分析プログラムを
+                開発してください。完成したら<strong>プログラムファイルと結果(画像/テキスト)</strong>を
+                アップロードして提出します。アップロードしたプログラムは<strong>実行されず</strong>、
+                表示・保管のみ(本番では TRE 内でオーナーがレビュー後に生データへ適用)。</p>
 
-            <!--
-              既存 3 ロールデモ(公開/分析/審査)を個別ページ配下に内包する。
-              既存 E2E のセレクタ互換を保つため、マークアップ・data 属性・id は不変。
-              fragments のパス基底のみ現在のデータセットに追従させる(fragBase)。
-            -->
-            <div class="explore-shell" data-testid="workbench"
-                 x-show="showWorkbench" x-cloak
-                 x-data="workflow()">
-              <p class="explore-intro">code-to-data / TRE 型ワークフローのデモ —
-                <strong>生データを外部に出さず</strong>、合成データで開発した分析コードを
-                オーナーが生データへ適用する。</p>
+              <!-- プログラムファイル(必須)。FileReader でテキスト取得し表示する(実行しない)。 -->
+              <label class="field">
+                <span class="login-label">分析プログラム(.py 等) <span class="req">*</span></span>
+                <input type="file" data-testid="submit-program-file"
+                       accept=".py,.r,.ipynb,.txt,.sql,.jl,.m,.csv,text/plain"
+                       @change="onProgram($event)" />
+              </label>
+              <p class="reg-filestatus" data-testid="program-status"
+                 x-show="programName" x-cloak>
+                <span x-text="programName"></span>
+                <span x-text="'(' + programBytes + ' bytes)'"></span></p>
+              <details class="frag-code" data-testid="program-preview"
+                       x-show="programText" x-cloak>
+                <summary>プログラム内容(プレビュー)</summary>
+                <pre><code x-text="programText"></code></pre>
+              </details>
 
-              <!-- ステッパー: ワークフローの現在地 -->
-              <nav class="stepper inline" aria-label="ワークフロー進捗">
-                <ol>
-                  <li :class="{ done: phaseRank() >= 1, active: phase === 'idle' }">
-                    <span class="num">1</span>合成データ公開</li>
-                  <li :class="{ done: phaseRank() >= 2, active: phase === 'published' }">
-                    <span class="num">2</span>分析者が開発・提出</li>
-                  <li :class="{ done: phaseRank() >= 3, active: phase === 'submitted' }">
-                    <span class="num">3</span>オーナーが承認・生データへ適用</li>
-                </ol>
-              </nav>
-
-              <!-- ロール切替タブ -->
-              <div class="tabs" role="tablist">
-                <button role="tab" :class="{ sel: role === 'publish' }"
-                        @click="role = 'publish'">① オーナー：公開</button>
-                <button role="tab" :class="{ sel: role === 'analyze' }"
-                        @click="role = 'analyze'" :disabled="phase === 'idle'"
-                        :title="phase === 'idle' ? 'まず合成データを公開してください' : ''">
-                  ② 分析者：ワークベンチ</button>
-                <button role="tab" :class="{ sel: role === 'review' }"
-                        @click="enterReview()" :disabled="phaseRank() < 2"
-                        :title="phaseRank() < 2 ? 'まず分析を提出してください' : ''">
-                  ③ オーナー：審査</button>
+              <!-- 結果(画像, 任意)。dataURL でプレビューのみ保持(サーバー送信なし)。 -->
+              <label class="field">
+                <span class="login-label">結果(画像 PNG/JPG, 任意)</span>
+                <input type="file" data-testid="submit-result-image"
+                       accept="image/png,image/jpeg,image/webp,image/gif"
+                       @change="onResultImage($event)" />
+              </label>
+              <div class="result-image-preview" data-testid="result-image-preview"
+                   x-show="resultImage" x-cloak>
+                <img :src="resultImage?.content" :alt="resultImage?.name"
+                     class="result-thumb" />
+                <span class="reg-filestatus" x-text="resultImage?.name"></span>
               </div>
 
-              <!-- ======================= ① オーナー：公開 ======================= -->
-              <section class="panel" x-show="role === 'publish'">
-                <h2>① オーナー：合成データを公開する</h2>
-                <p>手元の生データ(機微情報)はサーバー外に出しません。統計的性質を模した
-                  <strong>合成データ</strong>だけを分析者に公開します。</p>
+              <!-- 結果(テキスト/表, 任意)。 -->
+              <label class="field">
+                <span class="login-label">結果(テキスト/表, 任意)</span>
+                <textarea data-testid="submit-result-text" x-model="resultText" rows="4"
+                  placeholder="例: クラスタ別 responder 比率の表、要約統計、p 値など。"></textarea>
+              </label>
+              <p class="frag-note">※ 結果は<strong>画像かテキストの少なくとも一方</strong>が必要です。</p>
 
-                <div class="cards">
-                  <div class="card locked">
-                    <div class="lock">🔒 非公開</div>
-                    <h3>生データ (raw)</h3>
-                    <p>実際の患者の PSA 時系列・投薬記録。TRE 内に隔離され、分析者からは
-                      参照できません。</p>
-                    <code x-text="'data/' + fragBase + '/raw.json'"></code>
-                  </div>
+              <!-- レポート/メモ(任意)。 -->
+              <label class="field">
+                <span class="login-label">レポート・メモ(任意)</span>
+                <textarea data-testid="submit-report" x-model="report" rows="3"
+                  placeholder="所見やオーナーへの申し送り。"></textarea>
+              </label>
 
-                  <div class="card" :class="{ published: phase !== 'idle' }">
-                    <div class="lock open" x-show="phase !== 'idle'">🔓 公開済み</div>
-                    <h3>合成データ (synthetic)</h3>
-                    <p>別シード・分布シフトで生成。統計的に類似するが個票は別物。分析者は
-                      これを使ってコードを開発します。</p>
-                    <code x-text="'data/' + fragBase + '/synthetic.json'"></code>
-                  </div>
-                </div>
+              <p class="login-error" data-testid="submit-error"
+                 x-show="error" x-cloak x-text="error"></p>
+              <p class="reg-ok" data-testid="submit-success"
+                 x-show="success" x-cloak x-text="success"></p>
 
-                <div class="actions">
-                  <button class="primary" @click="publish()" :disabled="phase !== 'idle'"
-                          x-text="phase === 'idle' ? '合成データを公開する' : '公開済み ✓'"></button>
-                  <button class="ghost" @click="role = 'analyze'" x-show="phase !== 'idle'">
-                    分析者ワークベンチへ →</button>
-                </div>
-              </section>
-
-              <!-- ======================= ② 分析者：ワークベンチ ======================= -->
-              <section class="panel" x-show="role === 'analyze'">
-                <h2>② 分析者：合成データで分析を開発する</h2>
-                <p>公開された<strong>合成データ</strong>に対して分析コードを実行します
-                  (本番では htmx が FastAPI のエンドポイントを叩き、サーバーが scikit-learn で
-                  計算します)。</p>
-
-                <!--
-                  フラグメントのパス基底(fragBase)はデータセットごとに変わるため、
-                  静的 hx-get ではなく @click で htmx.ajax を発火する(本番でも GET 先が
-                  /datasets/<id>/analyses/<a> のような動的 URL になるだけで同形)。
-                -->
-                <div class="analysis-picker">
-                  <button class="chip" :class="{ sel: selected === 'clustering' }"
-                          @click="pick('clustering')">PSA軌跡クラスタリング</button>
-                  <button class="chip" :class="{ sel: selected === 'association' }"
-                          @click="pick('association')">投薬–PSA反応の関連分析</button>
-                  <button class="chip" :class="{ sel: selected === 'survival' }"
-                          @click="pick('survival')">進行イベントの生存時間分析</button>
-                </div>
-
-                <!-- 読込完了は target 要素の htmx:after-swap で検知する -->
-                <div id="analyst-result" class="result-pane"
-                     @htmx:after-swap="loaded = true">
-                  <p class="placeholder">上のボタンから分析を選ぶと、合成データでの結果が
-                    ここに読み込まれます。</p>
-                </div>
-
-                <div class="actions">
-                  <button class="primary" @click="submit()" :disabled="!loaded">
-                    この分析をオーナーへ提出する</button>
-                  <span class="hint" x-show="phase === 'submitted'">
-                    提出済み: <strong x-text="titleOf(submitted)"></strong> →
-                    <a href="#" @click.prevent="enterReview()">審査タブへ</a></span>
-                </div>
-
-                <!--
-                  提出物の登録(#25)。選んだ分析(プログラム相当 = どの分析 + 適用コード抜粋)に
-                  レポート(所見/メモ)を添えて、このデータセットに紐づく提出物として保存する。
-                  保存先は共有ストア submissions.byDataset[dataset_id](#26 の審査が読む)。
-                  提出は要ログイン(analyst 想定)。未ログインなら導線を案内する。
-                -->
-                <div class="submit-block" data-testid="submit-block"
-                     x-show="loaded" x-cloak>
-                  <h3>提出物として登録する</h3>
-                  <p class="frag-note">選択中の分析
-                    (<strong x-text="titleOf(selected)"></strong>)を、所見/メモを添えて
-                    このデータセットに紐づく提出物として登録します。プログラム本体は
-                    <strong>選んだ分析＋適用コード抜粋</strong>として記録されます。</p>
-
-                  <label class="field">
-                    <span class="login-label">レポート(所見・メモ) <span class="req">*</span></span>
-                    <textarea data-testid="submit-report" x-model="report" rows="4"
-                      placeholder="例: responder クラスタが過半数。ADT 用量と PSA 低下率に弱い正の関連。生データでの再現性を確認したい。"></textarea>
-                  </label>
-
-                  <p class="login-error" data-testid="submit-error"
-                     x-show="submitError" x-cloak x-text="submitError"></p>
-                  <p class="reg-ok" data-testid="submit-success"
-                     x-show="submitSuccess" x-cloak x-text="submitSuccess"></p>
-
-                  <div class="actions">
-                    <button class="primary" data-testid="submit-to-dataset"
-                            @click="submitToDataset()"
-                            :disabled="!$store.session.isAuthed()"
-                            :title="!$store.session.isAuthed()
-                              ? 'ログインすると提出できます' : ''">
-                      提出物としてデータセットに登録する</button>
-                    <span class="submit-hint" data-testid="submit-need-login"
-                          x-show="!$store.session.isAuthed()" x-cloak>
-                      提出にはログインが必要です。
-                      <a href="#" @click.prevent="$store.session.go('login')">ログインへ</a></span>
-                  </div>
-                </div>
-              </section>
-
-              <!-- ======================= ③ オーナー：審査 ======================= -->
-              <section class="panel" x-show="role === 'review'">
-                <h2>③ オーナー：提出物を審査し、生データに適用する</h2>
-                <p>分析者が提出したのは<strong>合成データでの結果</strong>です。コードを確認し、
-                  問題なければ<strong>同じコードを生データに適用</strong>して本物のレポートを
-                  作成します。</p>
-
-                <div class="compare">
-                  <div class="compare-col">
-                    <h3 class="col-head synthetic">提出物：合成データの結果</h3>
-                    <div id="review-synthetic" class="result-pane"></div>
-                  </div>
-                  <div class="compare-col">
-                    <h3 class="col-head raw">承認後：生データの結果</h3>
-                    <div id="review-raw" class="result-pane">
-                      <p class="placeholder">「承認して生データに適用」を押すと、同一コードを
-                        生データで実行した結果がここに表示されます。</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div class="actions">
-                  <button class="primary" @click="approve()" :disabled="phase === 'approved'"
-                          x-text="phase === 'approved' ? '承認済み ✓' : '承認して生データに適用する'">
-                  </button>
-                  <p class="callout" x-show="phase === 'approved'">
-                    ✅ 同じ分析コードが両データで動作しました。結果は<strong>近いが完全には
-                    一致しません</strong>(個票が異なるため)。だからこそ、合成データで安全に
-                    開発し、最後に生データへ適用するステップに価値があります。</p>
-                </div>
-              </section>
-            </div>
+              <div class="actions">
+                <button class="primary" data-testid="submit-to-dataset"
+                        @click="submit()"
+                        :disabled="!$store.session.isAuthed()"
+                        :title="!$store.session.isAuthed()
+                          ? 'ログインすると提出できます' : ''">
+                  プログラム＋結果を提出する</button>
+                <span class="submit-hint" data-testid="submit-need-login"
+                      x-show="!$store.session.isAuthed()" x-cloak>
+                  提出にはログインが必要です。
+                  <a href="#" @click.prevent="$store.session.go('login')">ログインへ</a></span>
+              </div>
             </div>
             </template>
           </section>
 
           <!--
-            紐づく提出物一覧(#25 が書き込む)。審査(#26)はこの一覧の各カードから行う。
-            owner だけに「審査する」導線を出し(擬似ガード)、選んだ提出物の合成結果＋レポートを
-            確認 → 承認で同一分析の生データ結果を並置 → status を approved に遷移させる。
+            紐づく提出物一覧(#41 が書き込む)。各カードは提出物の概要(プログラム名・結果件数・
+            レポート・status)を表示する。提出物の詳細閲覧と審査(プログラム＋結果の閲覧 →
+            承認)は #42(審査ビュー)で追加する。一覧の表示元は親 datasetPage の submissions()。
           -->
-          <section class="dataset-section" data-testid="dataset-submissions"
-                   x-data="reviewPanel()">
+          <section class="dataset-section" data-testid="dataset-submissions">
             <h3>紐づく提出物</h3>
-            <p class="frag-note">このデータセットの<strong>合成データ</strong>に対して
-              提出された分析＋レポートの一覧です。分析ワークベンチから提出すると
-              ここに追加されます。
-              <strong x-show="canReview()" x-cloak>オーナーは各提出物を審査し、承認すると
-              同一分析を生データに適用した結果を並置できます。</strong></p>
-
-            <!-- 非 owner には審査導線が出ない旨の注記(擬似ガード) -->
-            <p class="frag-note review-guard-note" data-testid="review-guard"
-               x-show="$store.session.isAuthed() && !canReview()" x-cloak>
-              提出物の審査は<strong>データオーナー</strong>のみ行えます。</p>
+            <p class="frag-note">このデータセットの<strong>合成データ</strong>に対して提出された
+              プログラム＋結果の一覧です。上のフォームから提出するとここに追加されます。</p>
 
             <div class="submission-list"
                  data-testid="submission-list"
@@ -856,10 +739,11 @@
                 まだ提出物はありません。</p>
               <template x-for="(s, i) in submissions()" :key="s.id || i">
                 <div class="card submission-card" data-testid="submission-card"
-                     :data-submission-id="s.id" :data-analysis="s.analysis"
+                     :data-submission-id="s.id"
                      :data-status="s.status">
                   <div class="submission-head">
-                    <strong x-text="s.analysisTitle || s.analysis"></strong>
+                    <strong data-testid="submission-program"
+                            x-text="s.program?.name || 'program'"></strong>
                     <span class="role-pill" data-testid="submission-status"
                           :class="{ approved: s.status === 'approved' }"
                           x-text="s.status"></span>
@@ -868,85 +752,14 @@
                     <span class="catalog-owner">👤 <span x-text="s.analyst"></span></span>
                     <span class="submission-when"
                           x-text="new Date(s.submittedAt).toLocaleString('ja-JP')"></span>
+                    <span class="submission-results" data-testid="submission-results-count"
+                          x-text="'結果 ' + (s.results?.length || 0) + ' 件'"></span>
                   </p>
                   <p class="submission-report" data-testid="submission-report"
-                     x-text="s.report"></p>
-                  <details class="frag-code" x-show="s.codeExcerpt" x-cloak>
-                    <summary>適用された分析コード(抜粋)</summary>
-                    <pre><code x-text="s.codeExcerpt"></code></pre>
-                  </details>
-
-                  <!-- 審査導線(owner 限定) -->
-                  <div class="actions" x-show="canReview()" x-cloak>
-                    <button class="primary" data-testid="review-open"
-                            @click="openReview(s)"
-                            x-show="reviewingId !== s.id"
-                            x-text="s.status === 'approved'
-                              ? '審査結果を見る' : '審査する →'"></button>
-                    <button class="ghost" data-testid="review-close"
-                            @click="closeReview()"
-                            x-show="reviewingId === s.id">審査を閉じる</button>
-                  </div>
+                     x-show="s.report" x-cloak x-text="s.report"></p>
                 </div>
               </template>
             </div>
-
-            <!--
-              提出物審査ビュー(owner 限定, #26)。一覧で選んだ提出物について、
-              提出された合成データの結果＋レポートを表示し、承認で同一分析を生データに
-              適用した結果(owner/raw フラグメント)を並置する。
-              既存ワークベンチの審査タブとは別領域(#review-synthetic/#review-raw とは
-              別 id: #sub-review-synthetic/#sub-review-raw)で、Chart の二重描画は
-              フラグメント側の destroy() で防ぐ。
-            -->
-            <section class="review-panel" data-testid="review-view"
-                     x-show="reviewing" x-cloak>
-              <h3>提出物を審査する：
-                <span data-testid="review-analysis-title"
-                      x-text="reviewing?.analysisTitle || reviewing?.analysis"></span></h3>
-              <p>分析者が提出したのは<strong>合成データでの結果</strong>です。レポートとコードを
-                確認し、問題なければ<strong>同じ分析を生データに適用</strong>して本物の結果を
-                得ます(生データは TRE に隔離されたまま、ここでは事前計算結果を読み込む擬似)。</p>
-
-              <!-- 提出レポート(所見/メモ) -->
-              <div class="review-report" data-testid="review-report-shown">
-                <h4>提出レポート</h4>
-                <p class="submission-report" x-text="reviewing?.report"></p>
-                <p class="submission-meta">
-                  <span class="catalog-owner">👤 <span x-text="reviewing?.analyst"></span></span>
-                </p>
-              </div>
-
-              <div class="compare">
-                <div class="compare-col">
-                  <h4 class="col-head synthetic">提出物：合成データの結果</h4>
-                  <div id="sub-review-synthetic" class="result-pane"></div>
-                </div>
-                <div class="compare-col">
-                  <h4 class="col-head raw">承認後：生データの結果</h4>
-                  <div id="sub-review-raw" class="result-pane">
-                    <p class="placeholder">「承認して生データに適用」を押すと、同一分析を
-                      生データで実行した結果がここに表示されます。</p>
-                  </div>
-                </div>
-              </div>
-
-              <div class="actions">
-                <button class="primary" data-testid="review-approve"
-                        @click="approve()"
-                        :disabled="reviewing?.status === 'approved'"
-                        x-text="reviewing?.status === 'approved'
-                          ? '承認済み ✓' : '承認して生データに適用する'"></button>
-                <button class="ghost" data-testid="review-view-close"
-                        @click="closeReview()">閉じる</button>
-              </div>
-
-              <p class="review-callout" data-testid="review-callout"
-                 x-show="reviewing?.status === 'approved'" x-cloak>
-                ✅ 同じ分析が両データで動作しました。結果は<strong>近いが完全には
-                一致しません</strong>(個票が異なるため)。だからこそ、合成データで安全に
-                開発・審査し、最後に生データへ適用するステップに価値があります。</p>
-            </section>
           </section>
         </div>
       </template>
@@ -1179,7 +992,6 @@
       return {
         dataset: null,
         loading: true,
-        showWorkbench: false,
         async load() {
           this.loading = true;
           try {
@@ -1221,7 +1033,6 @@
           const d = this.$store.catalog.find(datasetId);
           if (d && d !== this.dataset) {
             this.dataset = d;
-            this.showWorkbench = false; // データセット切替でワークベンチは畳む
           }
         },
         // dummy_preview を表示用テーブル定義(列順固定)に整形する。
@@ -1247,241 +1058,136 @@
       };
     }
 
-    // 同一データセットページには「旧ワークベンチ系の結果/審査領域」と
-    // 「新・提出物審査領域」の 2 系統が x-show で共存する。各フラグメント内の
-    // canvas id は chart-{kind}-{analysis}(例 chart-synthetic-clustering)で
-    // データセット非依存・コンテナ非依存のため、同一 analysis を両系統で同時に
-    // 開くと同 id の canvas がドキュメント内に 2 つ存在し、Chart.js の描画/destroy()
-    // が片方を壊す(核メッセージの「合成 vs 生の並置」が崩れる)。
-    //
-    // これを防ぐため、一方の結果/審査領域を開くときに他方の結果/審査領域を
-    // クリア(Chart 破棄 + innerHTML 空)して相互排他にする。クリア対象は
-    // 「フラグメントを読み込む pane の id」で指定する。
-    function clearResultPane(paneId, placeholderHTML) {
-      const pane = document.getElementById(paneId);
-      if (!pane) return;
-      // pane 配下の canvas に紐づく Chart を破棄してから DOM を捨てる
-      // (destroy せずに innerHTML を消すと Chart インスタンスが浮いて
-      //  以後の getChart(同 id) が古い参照を返す恐れがある)。
-      if (typeof Chart !== "undefined") {
-        pane.querySelectorAll("canvas").forEach((c) => {
-          const existing = Chart.getChart(c);
-          if (existing) existing.destroy();
-        });
-      }
-      pane.innerHTML = placeholderHTML || "";
-    }
-
-    // 旧ワークベンチ系(②分析結果 / ③審査の左右)を閉じる。
-    function clearWorkbenchPanes() {
-      clearResultPane(
-        "analyst-result",
-        '<p class="placeholder">上のボタンから分析を選ぶと、合成データでの結果が' +
-          "ここに読み込まれます。</p>"
-      );
-      clearResultPane("review-synthetic", "");
-      clearResultPane(
-        "review-raw",
-        '<p class="placeholder">「承認して生データに適用」を押すと、同一コードを' +
-          "生データで実行した結果がここに表示されます。</p>"
-      );
-    }
-
-    // 新・提出物審査系(③ #sub-review-*)を閉じる。
-    function clearSubReviewPanes() {
-      clearResultPane("sub-review-synthetic", "");
-      clearResultPane(
-        "sub-review-raw",
-        '<p class="placeholder">「承認して生データに適用」を押すと、同一分析を' +
-          "生データで実行した結果がここに表示されます。</p>"
-      );
-    }
-
-    // 提出物審査パネル(#26, owner 限定)。個別ページ(datasetPage)配下にネストされ、
-    // 親スコープの dataset / submissions() を参照する(Alpine はスコープを継承する)。
-    // 一覧の各カードから提出物を選ぶ → 合成結果を読み込み、承認で生データ結果を並置し、
-    // 共有ストアの status を approved に遷移させる(submission-status へ即時反映)。
-    function reviewPanel() {
+    // 分析プログラム＋結果の提出フォーム(#41, N2)。datasetPage 配下にネストされ、
+    // 親スコープの dataset を参照できる。アップロードしたプログラムは実行せず、
+    // FileReader でテキスト/画像(dataURL)を読み込み、共有ストア submissions へ保存する。
+    function submitForm() {
+      const MAX_PROGRAM_BYTES = 512 * 1024; // プログラムテキスト上限 512KB
+      const MAX_IMAGE_BYTES = 2 * 1024 * 1024; // 画像 dataURL の肥大化防止 2MB
+      // 許可する画像 MIME(完全一致)。image/svg+xml はスクリプトを含みうるため除外する。
+      const ALLOWED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"];
       return {
-        reviewingId: null,   // 審査中の提出物 id(null=非表示)
-        // owner のみ審査可。
-        //   仮定: catalog の owner 名と突き合わせる厳密一致は擬似のため簡略化し、
-        //   「owner ロールならこのデータセットの提出物を審査できる」とする(Issue 許容)。
-        //   本番では TRE/サーバーがデータセット所有権で認可する。
-        canReview() {
-          return this.$store.session.user?.role === "owner";
+        programName: "",
+        programText: "",
+        programBytes: 0,
+        resultImage: null, // { type:"image", name, content(dataURL) } | null
+        resultText: "",
+        report: "",
+        error: "",
+        success: "",
+        // ユーザー登録分(user-<n>)は合成データ未生成のため提出フォームを出さない。
+        get isUserDataset() {
+          const id = this.$store.session.currentDatasetId;
+          return !!id && this.$store.catalog.isUserDataset(id);
         },
-        // 審査中の提出物オブジェクト(共有ストアの実体。status 遷移が反映される)。
-        get reviewing() {
-          if (!this.reviewingId || !this.dataset) return null;
-          return this.$store.submissions.find(this.dataset.dataset_id, this.reviewingId);
-        },
-        // フラグメントのパス基底(= 選択中データセット)。
-        get fragBase() {
-          return (this.dataset && this.dataset.dataset_id)
-            || this.$store.session.currentDatasetId;
-        },
-        // 提出物を選んで審査ビューを開く。合成結果(analyst フラグメント)を左に読み込む。
-        // 既に承認済みなら生データ結果も復元表示する(再度開いても並置を維持)。
-        openReview(s) {
-          if (!this.canReview()) return;
-          // 相互排他: 旧ワークベンチ系の結果/審査領域を閉じ、同一 chart-{kind}-{analysis}
-          // canvas がドキュメント内に重複しない状態にしてから審査領域へ読み込む。
-          this.closeWorkbench();
-          this.reviewingId = s.id;
-          const base = this.fragBase;
-          htmx.ajax("GET", "fragments/" + base + "/analyst/" + s.analysis + ".html",
-                    "#sub-review-synthetic");
-          if (s.status === "approved") {
-            htmx.ajax("GET", "fragments/" + base + "/owner/" + s.analysis + ".html",
-                      "#sub-review-raw");
+        // プログラムファイルを読み込む(テキストとして表示。実行はしない)。
+        // 壊れた入力・過大サイズでも UI を破綻させず、状態メッセージで通知する。
+        onProgram(ev) {
+          this.error = "";
+          this.success = "";
+          const file = ev.target.files && ev.target.files[0];
+          if (!file) {
+            this._clearProgram();
+            return;
           }
-        },
-        closeReview() {
-          this.reviewingId = null;
-          clearSubReviewPanes();
-        },
-        // 旧ワークベンチ系の結果/審査領域を閉じる(相互排他)。pane の DOM をクリア
-        // し、ワークベンチ(workflow)コンポーネントの状態も初期化して、再表示時に
-        // 「読込済みなのに pane が空」という不整合や canvas id 重複を避ける。
-        closeWorkbench() {
-          clearWorkbenchPanes();
-          const wb = document.querySelector("[data-testid='workbench']");
-          if (wb && window.Alpine) {
-            const d = Alpine.$data(wb);
-            if (d) {
-              d.loaded = false;
-              d.selected = null;
-              if (d.role === "review") d.role = "analyze";
-            }
+          if (file.size > MAX_PROGRAM_BYTES) {
+            this.error = "プログラムファイルが大きすぎます(上限 512KB)。";
+            ev.target.value = "";
+            this._clearProgram();
+            return;
           }
+          const reader = new FileReader();
+          reader.onload = () => {
+            this.programText = String(reader.result || "");
+            this.programName = file.name;
+            this.programBytes = file.size;
+          };
+          reader.onerror = () => {
+            this.error = "プログラムの読み込みに失敗しました。";
+            this._clearProgram();
+          };
+          reader.readAsText(file);
         },
-        // 承認: 同一分析を生データに適用した結果(owner フラグメント)を右に読み込み、
-        // 共有ストアの status を approved に遷移させる(一覧の submission-status に反映)。
-        approve() {
-          const s = this.reviewing;
-          if (!s || !this.canReview()) return;
-          const base = this.fragBase;
-          htmx.ajax("GET", "fragments/" + base + "/owner/" + s.analysis + ".html",
-                    "#sub-review-raw");
-          this.$store.submissions.approve(
-            this.dataset.dataset_id, s.id, this.$store.session.user?.name);
+        _clearProgram() {
+          this.programName = "";
+          this.programText = "";
+          this.programBytes = 0;
         },
-        // 親 datasetPage の submissions() に委譲(一覧描画用)。
-        submissions() {
-          const id = this.dataset && this.dataset.dataset_id;
-          return id ? this.$store.submissions.forDataset(id) : [];
-        },
-      };
-    }
-
-    function workflow() {
-      return {
-        role: "publish",
-        phase: "idle",          // idle -> published -> submitted -> approved
-        selected: null,         // 分析者が選択中の分析
-        submitted: null,        // 提出した分析
-        loaded: false,          // フラグメント読込済みか
-        report: "",             // 提出レポート(所見/メモ, #25)
-        submitError: "",        // 提出物登録のバリデーションエラー
-        submitSuccess: "",      // 提出物登録の成功メッセージ
-        // フラグメント/データのパス基底(= dataset_id)。共有ストアの選択中データセットに追従。
-        get fragBase() {
-          return this.$store.session.currentDatasetId || "prostate-psa";
-        },
-        catalog: [
-          { id: "clustering",  title: "PSA軌跡クラスタリング" },
-          { id: "association", title: "投薬–PSA反応の関連分析" },
-          { id: "survival",    title: "進行イベントの生存時間分析" },
-        ],
-        phaseRank() {
-          return { idle: 0, published: 1, submitted: 2, approved: 3 }[this.phase];
-        },
-        titleOf(id) {
-          var a = this.catalog.find(function (x) { return x.id === id; });
-          return a ? a.title : "";
-        },
-        publish() {
-          if (this.phase === "idle") this.phase = "published";
-        },
-        // 相互排他: 新・提出物審査領域(#sub-review-*)を閉じ、同一
-        // chart-{kind}-{analysis} canvas の重複を防いでから旧ワークベンチへ読み込む。
-        closeSubReview() {
-          clearSubReviewPanes();
-          const panel = document.querySelector("[data-testid='dataset-submissions']");
-          if (panel && window.Alpine) {
-            const d = Alpine.$data(panel);
-            if (d) d.reviewingId = null;
+        // 結果画像を dataURL で読み込む(プレビュー用。サーバー送信なし)。
+        onResultImage(ev) {
+          this.error = "";
+          this.success = "";
+          const file = ev.target.files && ev.target.files[0];
+          if (!file) {
+            this.resultImage = null;
+            return;
           }
+          if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+            this.error = "画像は PNG / JPEG / WebP / GIF を選んでください(SVG 不可)。";
+            ev.target.value = "";
+            this.resultImage = null;
+            return;
+          }
+          if (file.size > MAX_IMAGE_BYTES) {
+            this.error = "画像が大きすぎます(上限 2MB)。";
+            ev.target.value = "";
+            this.resultImage = null;
+            return;
+          }
+          const reader = new FileReader();
+          reader.onload = () => {
+            this.resultImage = {
+              type: "image",
+              name: file.name,
+              content: String(reader.result || ""),
+            };
+          };
+          reader.onerror = () => {
+            this.error = "画像の読み込みに失敗しました。";
+            this.resultImage = null;
+          };
+          reader.readAsDataURL(file);
         },
-        pick(analysis) {
-          this.closeSubReview();
-          this.selected = analysis;
-          this.loaded = false;
-          // 分析を切り替えたら提出フォームの状態(レポート/メッセージ)を初期化する。
-          this.submitSuccess = "";
-          this.submitError = "";
-          // 合成データ結果フラグメントを #analyst-result に読み込む。
-          // 完了は #analyst-result の @htmx:after-swap が loaded=true にする。
-          htmx.ajax("GET", "fragments/" + this.fragBase + "/analyst/" +
-                    analysis + ".html", "#analyst-result");
-        },
+        // 提出: プログラム＋結果(画像/テキスト)＋レポートを共有ストアへ保存する。
+        // 要ログイン。結果は画像かテキストの少なくとも一方が必要。
         submit() {
-          if (!this.loaded) return;
-          this.submitted = this.selected;
-          if (this.phaseRank() < 2) this.phase = "submitted";
-        },
-        // 読み込み済みフラグメントから適用コード抜粋(details.frag-code の <code>)を取り出す。
-        // プログラム相当の記録として提出物に含める(自由記述コードの実行はしない)。
-        extractCodeExcerpt() {
-          const el = document.querySelector("#analyst-result details.frag-code code");
-          return el ? el.textContent.trim() : "";
-        },
-        // 選んだ分析 + レポートを、このデータセットに紐づく提出物として共有ストアへ登録する(#25)。
-        // 要ログイン(analyst 想定)。dataset_id は共有ストアの選択中データセットを起点にする。
-        submitToDataset() {
-          this.submitError = "";
-          this.submitSuccess = "";
+          this.error = "";
+          this.success = "";
           if (!this.$store.session.isAuthed()) {
-            this.submitError = "提出にはログインが必要です。";
+            this.error = "提出にはログインが必要です。";
             return;
           }
-          if (!this.loaded || !this.selected) {
-            this.submitError = "先に分析を選んで実行してください。";
+          if (!this.programText || !this.programName) {
+            this.error = "分析プログラムのファイルをアップロードしてください。";
             return;
           }
-          if (!this.report.trim()) {
-            this.submitError = "レポート(所見・メモ)を入力してください。";
+          const results = [];
+          if (this.resultImage) results.push(this.resultImage);
+          if (this.resultText.trim()) {
+            results.push({
+              type: "text",
+              name: "結果(テキスト)",
+              content: this.resultText.trim(),
+            });
+          }
+          if (results.length === 0) {
+            this.error = "結果(画像またはテキスト)を少なくとも 1 つ添えてください。";
             return;
           }
-          const datasetId = this.fragBase;
+          const datasetId = this.$store.session.currentDatasetId;
           const saved = this.$store.submissions.add(datasetId, {
-            analysis: this.selected,
-            analysisTitle: this.titleOf(this.selected),
-            analyst: this.$store.session.user?.name || "analyst",
+            program: { name: this.programName, text: this.programText },
+            results,
             report: this.report.trim(),
-            codeExcerpt: this.extractCodeExcerpt(),
+            analyst: this.$store.session.user?.name || "analyst",
           });
-          // ワークフロー状態としても「提出済み」に進める(既存ステッパー/審査導線と整合)。
-          this.submitted = this.selected;
-          if (this.phaseRank() < 2) this.phase = "submitted";
-          this.submitSuccess =
+          this.success =
             "提出しました(" + saved.id + ")。下の「紐づく提出物」に追加されました。";
+          // 連続提出に備えてフォームを初期化する。
+          this._clearProgram();
+          this.resultImage = null;
+          this.resultText = "";
           this.report = "";
-        },
-        enterReview() {
-          if (this.phaseRank() < 2) return;
-          this.closeSubReview();
-          this.role = "review";
-          // 提出された合成データ結果を審査タブの左に読み込む
-          htmx.ajax("GET", "fragments/" + this.fragBase + "/analyst/" +
-                    this.submitted + ".html", "#review-synthetic");
-        },
-        approve() {
-          // 同一コードを生データに適用した結果を右に読み込む
-          htmx.ajax("GET", "fragments/" + this.fragBase + "/owner/" +
-                    this.submitted + ".html", "#review-raw");
-          this.phase = "approved";
         },
       };
     }
