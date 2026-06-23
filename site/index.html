@@ -352,6 +352,23 @@
         (Trusted Research Environment)内で生データから合成データを生成・検証します。
         <strong>ここで扱うデータはすべて架空</strong>です(実患者データを入力しないでください)。</p>
 
+      <!-- ---- デモ用ワンクリック登録(#55) ---- -->
+      <!--
+        手入力なしで「登録 → カタログ反映 → 個別ページ」を素早く見せるための
+        デモ専用ショートカット。owner 限定の register ビュー内にあるので追加ガードは不要。
+        通常の手入力フォームと同じ catalog.register() を通すため、登録結果は手動登録と同一。
+        架空データである旨を添える(本番では使わない便宜機能)。
+      -->
+      <section class="reg-demo" data-testid="reg-demo">
+        <div class="reg-demo-text">
+          <strong>デモを素早く試す</strong>
+          <p class="frag-note">手入力なしで架空のデモ用データセットをカタログに登録します
+            (便宜機能・架空データ)。登録後は新規データセットの個別ページを開きます。</p>
+        </div>
+        <button class="primary" type="button" data-testid="reg-demo-register"
+                @click="registerDemo()">デモ用データを登録</button>
+      </section>
+
       <form class="register-form" @submit.prevent="submit()">
         <!-- ---- メタデータ ---- -->
         <label class="field">
@@ -911,6 +928,61 @@
         uploadStatus: "",
         error: "",
         success: "",
+        demoSeq: 0,           // デモ用データセットの巡回インデックス(#55)
+        // デモ用ワンクリック登録(#55)で使う架空データセット定義。
+        // catalog.json の datasets[] と同形(title/description/owner/domain/tags/
+        // usage_examples/n_patients/dummy_preview)。owner は登録時に補完する。
+        // 分析フラグメント(synthetic/raw)は持たないため、個別ページでは
+        // メタデータ+ダミーのみ表示され、合成データ DL は出ない(hasSyntheticDownload=false)。
+        // 複数定義し、クリックごとに次を登録する(巡回)。
+        demoDatasets: [
+          {
+            title: "心不全 再入院リスク コホート(デモ)",
+            description: "退院後 30 日以内の再入院に関連する指標を集めた架空コホート。" +
+              "デモ用の合成/ダミーデータで、実患者データは一切含みません。",
+            domain: "cardiology",
+            tags: ["heart-failure", "readmission", "longitudinal"],
+            usage_examples: [
+              "再入院リスクのロジスティック回帰でリスク因子を同定する",
+              "退院後フォローアップ間隔と再入院率の関連を可視化する",
+            ],
+            n_patients: 180,
+            dummy_preview: {
+              patients: [
+                { patient_id: "HF-001", age: 72, risk_group: "high", enrollment_date: "2023-01-12" },
+                { patient_id: "HF-002", age: 64, risk_group: "moderate", enrollment_date: "2023-02-03" },
+                { patient_id: "HF-003", age: 81, risk_group: "high", enrollment_date: "2023-02-20" },
+              ],
+              medications: [
+                { patient_id: "HF-001", datetime: "2023-01-13T08:30", drug: "furosemide", dose_mg: 40 },
+                { patient_id: "HF-002", datetime: "2023-02-04T09:15", drug: "carvedilol", dose_mg: 12 },
+              ],
+            },
+          },
+          {
+            title: "2 型糖尿病 HbA1c 推移(デモ)",
+            description: "血糖管理マーカー(HbA1c)の経時推移を含む架空データセット。" +
+              "デモ用のダミーデータのみで、生データは共有されません。",
+            domain: "endocrinology",
+            tags: ["diabetes", "hba1c", "marker"],
+            usage_examples: [
+              "HbA1c 軌跡のクラスタリングで管理パターンを分類する",
+              "投薬変更前後の HbA1c 変化を比較する",
+            ],
+            n_patients: 140,
+            dummy_preview: {
+              patients: [
+                { patient_id: "DM-01", age: 55, risk_group: "moderate", enrollment_date: "2022-09-01" },
+                { patient_id: "DM-02", age: 48, risk_group: "low", enrollment_date: "2022-10-11" },
+              ],
+              psa_measurements: [
+                { patient_id: "DM-01", date: "2022-09-05", psa: 7.2 },
+                { patient_id: "DM-01", date: "2022-12-05", psa: 6.8 },
+                { patient_id: "DM-02", date: "2022-10-15", psa: 6.1 },
+              ],
+            },
+          },
+        ],
         // 事前同梱サンプル(ブラウザ内蔵の小さなダミー。生成ではなく固定値)。
         samples: [
           {
@@ -1038,6 +1110,22 @@
           const id = this.$store.catalog.register(entry);
           this.success = "登録しました(" + id + ")。データカタログに反映されました。";
           this.resetForm();
+        },
+        // デモ用ワンクリック登録(#55)。手入力フォームと同じ catalog.register() を通し、
+        // owner だけを登録時に補完する(他フィールドは demoDatasets 定義をそのまま使用)。
+        // クリックごとに demoDatasets を巡回し、登録直後に新規データセットの個別ページを開く。
+        registerDemo() {
+          this.error = "";
+          this.success = "";
+          const def = this.demoDatasets[this.demoSeq % this.demoDatasets.length];
+          this.demoSeq += 1;
+          const entry = {
+            ...def,
+            owner: this.$store.session.user?.name || "owner",
+          };
+          const id = this.$store.catalog.register(entry);
+          // 登録後は新規データセットの個別ページへ遷移して即座に確認できるようにする。
+          this.$store.session.openDataset(id);
         },
         resetForm() {
           this.form = {

@@ -233,6 +233,14 @@ button.ghost {
   padding: 12px 14px; font-size: .85rem; color: #6b5a30; margin: 0 0 18px; line-height: 1.55;
 }
 .register-disclaimer strong { color: #8a6d1f; }
+.reg-demo {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  flex-wrap: wrap; background: #eef4ff; border: 1px solid #cfe0ff;
+  border-radius: var(--radius); padding: 14px 16px; margin: 0 0 20px;
+}
+.reg-demo-text { flex: 1 1 280px; }
+.reg-demo-text strong { color: var(--brand); display: block; margin-bottom: 2px; }
+.reg-demo .frag-note { margin: 0; }
 .register-form { display: flex; flex-direction: column; gap: 16px; }
 .register-form input[type="text"],
 .register-form input[type="number"],

@@ -48,6 +48,48 @@ def test_register_sample_reflects_in_catalog(page: Page, base_url: str) -> None:
     expect(page.locator("[data-testid='catalog-card']", has_text=title)).to_be_visible()
 
 
+def test_register_demo_one_click(page: Page, base_url: str) -> None:
+    """owner がデモボタンを押すと、デモデータセットが登録され個別ページが開く(#55)。"""
+    open_register(page, base_url)
+    demo = page.get_by_test_id("reg-demo-register")
+    expect(demo).to_be_visible()
+
+    # ワンクリック登録 → 直後に新規データセットの個別ページへ遷移する。
+    demo.click()
+    page.wait_for_selector("[data-testid='dataset-view']", state="visible")
+    title = page.get_by_test_id("dataset-title")
+    expect(title).to_be_visible()
+    expect(title).to_contain_text("デモ")
+    # ユーザー登録分なので合成データ DL は出ない(user-* は synthetic 未生成)。
+    expect(page.get_by_test_id("download-synthetic")).to_be_hidden()
+
+    # カタログ一覧にも反映される(先頭に出る)。
+    page.get_by_test_id("nav-explore").click()
+    page.wait_for_selector("[data-testid='catalog-card']", state="visible")
+    expect(page.locator("[data-testid='catalog-card']", has_text="デモ").first).to_be_visible()
+
+
+def test_register_demo_cycles_definitions(page: Page, base_url: str) -> None:
+    """デモボタンを連続クリックすると別々のデモデータセットが登録される(巡回, #55)。"""
+    open_register(page, base_url)
+    page.get_by_test_id("reg-demo-register").click()
+    page.wait_for_selector("[data-testid='dataset-view']", state="visible")
+    first = page.get_by_test_id("dataset-title").inner_text()
+
+    # register ビューへ戻って 2 回目のクリック → 別タイトルが登録される。
+    page.get_by_test_id("nav-register").click()
+    page.wait_for_selector("[data-testid='register-view']", state="visible")
+    page.get_by_test_id("reg-demo-register").click()
+    page.wait_for_selector("[data-testid='dataset-view']", state="visible")
+    second = page.get_by_test_id("dataset-title").inner_text()
+    assert first != second
+
+    # 登録済みは 2 件。
+    page.get_by_test_id("nav-register").click()
+    page.wait_for_selector("[data-testid='register-view']", state="visible")
+    expect(page.locator("[data-testid='reg-item']")).to_have_count(2)
+
+
 def test_register_required_validation(page: Page, base_url: str) -> None:
     """必須項目(タイトル/概要/ドメイン/データ源)が欠けると登録できずエラーが出る。"""
     open_register(page, base_url)
