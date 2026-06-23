@@ -629,6 +629,25 @@
                  :href="syntheticHref" :download="syntheticFilename">
                 合成データ(JSON)をダウンロード ↓</a>
             </div>
+
+            <!--
+              合成データの CSV ダウンロード(#51)。JSON に加え、テーブル単位の CSV を提供する。
+              方式 B(クライアント側変換): クリック時に synthetic.json を fetch し、meta を除く
+              各テーブル配列(patients / *_measurements / medications …)を RFC4180 準拠の CSV へ
+              変換して Blob ダウンロードする。生成物(site/data/**)は一切変更しない。
+              ファイル名は <dataset_id>-<table>-synthetic.csv。生データ(raw)は CSV でも提供しない。
+              データの DOM 注入(innerHTML/x-html)は行わず、テキストは標準 API のみで扱う。
+            -->
+            <p class="frag-note csv-note">テーブルごとに <strong>CSV</strong> でも取得できます
+              (synthetic.json をブラウザ内で変換)。</p>
+            <div class="actions csv-actions" data-testid="download-synthetic-csv">
+              <template x-for="t in csvTables" :key="t">
+                <button type="button" class="ghost csv-link"
+                        :data-testid="'download-synthetic-csv-' + t"
+                        @click="downloadTableCsv(t)"
+                        x-text="t + ' (CSV) ↓'"></button>
+              </template>
+            </div>
           </section>
 
           <!--
@@ -1130,12 +1149,83 @@
           const id = this.dataset && this.dataset.dataset_id;
           return id ? id + "-synthetic.json" : "synthetic.json";
         },
+        // 合成データ CSV ダウンロード(#51)。配布対象は synthetic.json の各テーブル配列
+        // (meta を除く top-level の配列)。テーブル名は現在のデータセットを開いたときに
+        // synthetic.json を一度だけ fetch して導出する(キャッシュ)。生データは扱わない。
+        csvTables: [],
+        _csvCache: { id: null, data: null },
+        // synthetic.json を取得してキャッシュする(同一データセットでは一度きり)。
+        async _fetchSynthetic() {
+          const id = this.dataset && this.dataset.dataset_id;
+          if (!id) return null;
+          if (this._csvCache.id === id && this._csvCache.data) {
+            return this._csvCache.data;
+          }
+          const res = await fetch("data/" + id + "/synthetic.json");
+          if (!res.ok) throw new Error("synthetic.json の取得に失敗しました");
+          const data = await res.json();
+          this._csvCache = { id, data };
+          return data;
+        },
+        // meta を除く top-level の配列キー(テーブル名)を返す。
+        _tableNames(data) {
+          return Object.keys(data || {}).filter(
+            (k) => k !== "meta" && Array.isArray(data[k])
+          );
+        },
+        // 個別ページ表示時に CSV ボタン用のテーブル名一覧を用意する。
+        async loadCsvTables() {
+          this.csvTables = [];
+          if (!this.hasSyntheticDownload) return;
+          try {
+            const data = await this._fetchSynthetic();
+            this.csvTables = this._tableNames(data);
+          } catch (e) {
+            // 取得失敗時は CSV 導線を出さない(JSON 導線は別途残る)。
+            this.csvTables = [];
+          }
+        },
+        // 行配列(オブジェクトの配列)を RFC4180 準拠の CSV 文字列へ変換する。
+        // ヘッダは先頭行のキー順で固定。カンマ/二重引用符/改行を含むセルは
+        // 二重引用符で囲み、内部の二重引用符は二重化してエスケープする。
+        toCsv(rows) {
+          if (!Array.isArray(rows) || rows.length === 0) return "";
+          const headers = Object.keys(rows[0]);
+          const esc = (v) => {
+            const s = v === null || v === undefined ? "" : String(v);
+            return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+          };
+          const lines = [headers.map(esc).join(",")];
+          for (const row of rows) {
+            lines.push(headers.map((h) => esc(row[h])).join(","));
+          }
+          return lines.join("\r\n");
+        },
+        // 指定テーブルを CSV に変換し Blob ダウンロードを発火する。
+        async downloadTableCsv(table) {
+          const id = this.dataset && this.dataset.dataset_id;
+          if (!id) return;
+          const data = await this._fetchSynthetic();
+          const rows = data && data[table];
+          if (!Array.isArray(rows)) return;
+          const csv = this.toCsv(rows);
+          const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = id + "-" + table + "-synthetic.csv";
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        },
         // 共有ストアの currentDatasetId 変化に追従して表示対象を切り替える。
         syncCurrent(datasetId) {
           if (!datasetId) return;
           const d = this.$store.catalog.find(datasetId);
           if (d && d !== this.dataset) {
             this.dataset = d;
+            this.loadCsvTables();
           }
         },
         // dummy_preview を表示用テーブル定義(列順固定)に整形する。
