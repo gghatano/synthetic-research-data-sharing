@@ -234,6 +234,61 @@ def test_preset_approved_shows_review_result_button_and_seeded_comment(
     expect(page.get_by_test_id("comment-item").first).to_contain_text("用量反応の方向性")
 
 
+def test_review_result_chart_renders_for_preset(page: Page, base_url: str) -> None:
+    """審査ページで chart spec を持つ結果がグラフ描画される(#81)。"""
+    open_dataset_as(page, base_url, name=OWNER[0], password=OWNER[1])
+
+    # preset-1(clustering)はクラスタ別 responder 比率の棒グラフ spec を持つ。
+    _open_submission_page(page, _preset_card(page, "preset-1"))
+    review = page.get_by_test_id("review-view")
+    chart = review.get_by_test_id("review-result-chart")
+    expect(chart).to_be_visible()
+    expect(chart).to_have_attribute("data-chart-type", "bar")
+    # Chart.js の描画完了フラグ(canvas が作られ描画された)を待つ。
+    expect(review.get_by_test_id("review-result-canvas")).to_have_attribute(
+        "data-chart-ready", "true"
+    )
+    # キャプションに spec のタイトルが出る。
+    expect(chart).to_contain_text("クラスタ別 responder 比率")
+
+
+def test_review_chart_rerenders_on_submission_switch(page: Page, base_url: str) -> None:
+    """別の提出物へ遷移するとグラフが新しい spec で再描画される(:key 再生成, #81)。"""
+    open_dataset_as(page, base_url, name=OWNER[0], password=OWNER[1])
+
+    # preset-1: 棒グラフ(クラスタ別 responder 比率)。
+    _open_submission_page(page, _preset_card(page, "preset-1"))
+    review = page.get_by_test_id("review-view")
+    expect(review.get_by_test_id("review-result-canvas")).to_have_attribute(
+        "data-chart-ready", "true"
+    )
+    expect(review.get_by_test_id("review-result-chart")).to_have_attribute("data-chart-type", "bar")
+
+    # 戻って preset-2(dose_response)を開くと、折れ線(用量反応曲線)へ切り替わる。
+    page.get_by_test_id("submission-back").click()
+    page.wait_for_selector("[data-testid='dataset-view']", state="visible")
+    _open_submission_page(page, _preset_card(page, "preset-2"))
+    review = page.get_by_test_id("review-view")
+    expect(review.get_by_test_id("review-result-chart")).to_have_attribute(
+        "data-chart-type", "line"
+    )
+    expect(review.get_by_test_id("review-result-canvas")).to_have_attribute(
+        "data-chart-ready", "true"
+    )
+
+
+def test_user_text_result_without_chart_stays_text(page: Page, base_url: str) -> None:
+    """chart spec を持たないユーザー提出のテキスト結果はグラフ化されない(非スコープ, #81)。"""
+    open_dataset_as(page, base_url, name=OWNER[0], password=OWNER[1])
+    _submit_one(page, with_image=False)
+    _open_submission_page(page, _user_card(page))
+    review = page.get_by_test_id("review-view")
+
+    # テキスト結果は表示されるが、chart canvas は描かれない。
+    expect(review.locator("[data-result-type='text']")).to_contain_text("responder 比率")
+    assert review.get_by_test_id("review-result-chart").count() == 0
+
+
 def test_preset_does_not_collide_with_user_submission_ids(page: Page, base_url: str) -> None:
     """プリセット(preset-<n>)が seq を進めず、ユーザー提出は sub-<n> でユニーク採番(#53)。"""
     open_dataset_as(page, base_url, name=ANALYST[0], password=ANALYST[1])
