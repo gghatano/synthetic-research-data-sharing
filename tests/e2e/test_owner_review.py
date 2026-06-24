@@ -1,8 +1,10 @@
-"""E2E: 提出物(プログラム＋結果)の owner 審査(#42, N3)。
+"""E2E: 提出物の審査・コメント・承認(#42 / #64, N3)。
 
-owner が個別ページの「紐づく提出物」から提出物を選び、プログラム(コード)＋結果
-(画像/テキスト)＋レポートを閲覧し、承認で status を approved に遷移させる。
-生データ並置(合成≈生)は審査では行わない(核メッセージのデモは #43 のデモ面)。
+#64 で審査をデータセット個別ページのインラインパネルから、提出物ごとの専用ページ
+(submission ビュー = submission-view)へ移設した。owner は提出物カードの導線で専用ページへ
+遷移し、プログラム(コード)＋結果(画像/テキスト)＋レポートを閲覧し、コメントで対話し、
+承認で status を approved に遷移させる。コメントは owner / analyst 双方が可能(要ログイン)、
+承認は owner 限定。生データ並置(合成 vs 生)は審査では行わない(#54)。
 """
 
 from __future__ import annotations
@@ -10,7 +12,7 @@ from __future__ import annotations
 import pytest
 from playwright.sync_api import Page, expect
 
-from .helpers import open_dataset_as
+from .helpers import ANALYST, OWNER, open_dataset_as
 
 pytestmark = pytest.mark.e2e
 
@@ -48,15 +50,21 @@ def _user_card(page: Page):
     return page.locator("[data-testid='submission-card'][data-submission-id^='sub-']").last
 
 
+def _open_submission_page(page: Page, card) -> None:
+    """カードの導線(review-open)を押し、提出物個別ページ(#64)を開いて待つ。"""
+    card.get_by_test_id("review-open").click()
+    page.wait_for_selector("[data-testid='submission-view']", state="visible")
+    page.wait_for_selector("[data-testid='review-view']", state="visible")
+
+
 def test_owner_reviews_program_results_report_and_approves(page: Page, base_url: str) -> None:
-    """owner が提出物のプログラム＋結果＋レポートを閲覧し、承認で approved になる。"""
-    open_dataset_as(page, base_url, name="保田 オーナー", role="owner")
+    """owner が提出物個別ページでプログラム＋結果＋レポートを閲覧し、承認で approved になる。"""
+    open_dataset_as(page, base_url, name=OWNER[0], password=OWNER[1])
     _submit_one(page)
 
-    # 審査を開く(プリセット #53 ではなくユーザー提出分を選ぶ)。
-    _user_card(page).get_by_test_id("review-open").click()
+    # 専用ページへ遷移(プリセット #53 ではなくユーザー提出分を選ぶ)。
+    _open_submission_page(page, _user_card(page))
     review = page.get_by_test_id("review-view")
-    expect(review).to_be_visible()
 
     # プログラム(コード)が x-text で表示される。
     expect(review.get_by_test_id("review-program-code")).to_contain_text("KMeans")
@@ -69,20 +77,56 @@ def test_owner_reviews_program_results_report_and_approves(page: Page, base_url:
     assert (img.get_attribute("src") or "").startswith("data:image/")
     expect(review.locator("[data-result-type='text']")).to_contain_text("responder 比率")
 
-    # 承認 → status が approved に遷移し、一覧へ反映。
+    # 承認 → status が approved に遷移し、callout が出る。
     review.get_by_test_id("review-approve").click()
     expect(review.get_by_test_id("review-callout")).to_be_visible()
+    expect(review.get_by_test_id("submission-status")).to_have_text("approved")
+
+    # データセット個別ページへ戻ると、一覧カードにも approved が反映される。
+    page.get_by_test_id("submission-back").click()
+    page.wait_for_selector("[data-testid='dataset-view']", state="visible")
     card = _user_card(page)
     expect(card.get_by_test_id("submission-status")).to_have_text("approved")
     expect(card).to_have_attribute("data-status", "approved")
 
 
-def test_review_has_no_raw_data_juxtaposition(page: Page, base_url: str) -> None:
-    """審査ビューに生データ並置(合成 vs 生)が存在しない(核メッセージはデモ面へ移設)。"""
-    open_dataset_as(page, base_url, name="保田 オーナー", role="owner")
+def test_owner_can_comment_on_submission(page: Page, base_url: str) -> None:
+    """owner が提出物個別ページでコメントを追加でき、即時に一覧へ表示される(#64)。"""
+    open_dataset_as(page, base_url, name=OWNER[0], password=OWNER[1])
     _submit_one(page, with_image=False)
-    _user_card(page).get_by_test_id("review-open").click()
-    expect(page.get_by_test_id("review-view")).to_be_visible()
+    _open_submission_page(page, _user_card(page))
+
+    page.get_by_test_id("comment-input").fill("クラスタ境界の根拠を補足してください。")
+    page.get_by_test_id("comment-submit").click()
+
+    items = page.get_by_test_id("comment-item")
+    expect(items.last).to_contain_text("クラスタ境界の根拠")
+    # 著者はログイン中ユーザー名(owner)。
+    expect(items.last).to_contain_text(OWNER[0])
+    # 入力欄は送信後にクリアされる。
+    expect(page.get_by_test_id("comment-input")).to_have_value("")
+
+
+def test_analyst_can_comment_but_not_approve(page: Page, base_url: str) -> None:
+    """analyst は提出物個別ページを閲覧・コメントできるが、承認導線は出ない(#64)。"""
+    open_dataset_as(page, base_url, name=ANALYST[0], password=ANALYST[1])
+    _submit_one(page, with_image=False)
+    _open_submission_page(page, _user_card(page))
+
+    # 承認ボタンは owner 限定(x-show)で非表示。
+    assert page.locator("[data-testid='review-approve']:visible").count() == 0
+    # コメントは可能(全ログインユーザー)。
+    page.get_by_test_id("comment-input").fill("再現性の検証方法を共有します。")
+    page.get_by_test_id("comment-submit").click()
+    expect(page.get_by_test_id("comment-item").last).to_contain_text("再現性の検証方法")
+    expect(page.get_by_test_id("comment-item").last).to_contain_text(ANALYST[0])
+
+
+def test_review_has_no_raw_data_juxtaposition(page: Page, base_url: str) -> None:
+    """提出物個別ページに生データ並置(合成 vs 生)が存在しない(核メッセージはデモ面へ移設)。"""
+    open_dataset_as(page, base_url, name=OWNER[0], password=OWNER[1])
+    _submit_one(page, with_image=False)
+    _open_submission_page(page, _user_card(page))
 
     # 旧・生データ並置の痕跡(別 id pane / 合成 vs 生の compare)が無い。
     assert page.locator("#sub-review-raw").count() == 0
@@ -90,30 +134,43 @@ def test_review_has_no_raw_data_juxtaposition(page: Page, base_url: str) -> None
     assert page.get_by_test_id("review-view").locator(".compare").count() == 0
 
 
-def test_analyst_has_no_review_affordance(page: Page, base_url: str) -> None:
-    """analyst には審査導線が出ず、ガード注記が表示される。"""
-    open_dataset_as(page, base_url, name="分析 太郎", role="analyst")
+def test_analyst_has_no_approve_affordance_in_list(page: Page, base_url: str) -> None:
+    """analyst にはデータセット一覧に承認ガード注記が出る(承認は owner 限定, #64)。"""
+    open_dataset_as(page, base_url, name=ANALYST[0], password=ANALYST[1])
     _submit_one(page, with_image=False)
 
-    # 審査ボタンは owner 限定(x-show)で非表示、ガード注記が出る。
-    # プリセット(#53)を含め全カードの審査ボタンが出ない(analyst 不可)。
-    assert page.locator("[data-testid='review-open']:visible").count() == 0
+    # 一覧の遷移導線(review-open)は出る(閲覧/コメントのため全ロール可)が、文言は「詳細を見る」。
+    expect(_user_card(page).get_by_test_id("review-open")).to_have_text("詳細を見る →")
+    # 承認は owner 限定の旨のガード注記が出る。
     expect(page.get_by_test_id("review-guard")).to_be_visible()
 
 
-def test_approved_submission_reopens_with_result(page: Page, base_url: str) -> None:
-    """承認済み提出物を再度開くと、プログラム＋結果が復元表示される。"""
-    open_dataset_as(page, base_url, name="保田 オーナー", role="owner")
+def test_submission_back_navigation(page: Page, base_url: str) -> None:
+    """提出物個別ページから「戻る」でデータセット個別ページへ復帰する(#64)。"""
+    open_dataset_as(page, base_url, name=OWNER[0], password=OWNER[1])
     _submit_one(page, with_image=False)
-    card = _user_card(page)
-    card.get_by_test_id("review-open").click()
-    page.get_by_test_id("review-approve").click()
-    page.get_by_test_id("review-view-close").click()
-    expect(page.get_by_test_id("review-view")).to_be_hidden()
+    _open_submission_page(page, _user_card(page))
 
-    # 「審査結果を見る」で再オープン(ユーザー提出分のカード)。
-    expect(card.get_by_test_id("review-open")).to_have_text("審査結果を見る")
-    card.get_by_test_id("review-open").click()
+    page.get_by_test_id("submission-back").click()
+    expect(page.get_by_test_id("dataset-view")).to_be_visible()
+    expect(page.get_by_test_id("submission-view")).to_be_hidden()
+
+
+def test_approved_submission_reopens_with_result(page: Page, base_url: str) -> None:
+    """承認済み提出物を再度開くと、プログラム＋結果が復元表示され承認ボタンが無効(#64)。"""
+    open_dataset_as(page, base_url, name=OWNER[0], password=OWNER[1])
+    _submit_one(page, with_image=False)
+    _open_submission_page(page, _user_card(page))
+    page.get_by_test_id("review-approve").click()
+    expect(page.get_by_test_id("review-callout")).to_be_visible()
+
+    # データセットへ戻る。
+    page.get_by_test_id("submission-back").click()
+    page.wait_for_selector("[data-testid='dataset-view']", state="visible")
+    card = _user_card(page)
+    # 「審査結果を見る →」で再オープン(ユーザー提出分のカード)。
+    expect(card.get_by_test_id("review-open")).to_have_text("審査結果を見る →")
+    _open_submission_page(page, card)
     expect(page.get_by_test_id("review-program-code")).to_contain_text("KMeans")
     expect(page.get_by_test_id("review-approve")).to_be_disabled()
 
@@ -125,7 +182,7 @@ def _preset_card(page: Page, submission_id: str):
 
 def test_preset_submissions_seeded_on_dataset(page: Page, base_url: str) -> None:
     """初回表示でプリセット提出物(#53)が一覧に並び、提出ゼロでないこと。"""
-    open_dataset_as(page, base_url, name="保田 オーナー", role="owner")
+    open_dataset_as(page, base_url, name=OWNER[0], password=OWNER[1])
 
     # まだ手動提出していなくても、プリセットがカードとして見える。
     expect(_preset_card(page, "preset-1")).to_be_visible()
@@ -137,7 +194,7 @@ def test_preset_submissions_seeded_on_dataset(page: Page, base_url: str) -> None
 
 def test_preset_status_mix_submitted_and_approved(page: Page, base_url: str) -> None:
     """プリセットは submitted と approved を混在し、一覧の status 差が見える(#53)。"""
-    open_dataset_as(page, base_url, name="保田 オーナー", role="owner")
+    open_dataset_as(page, base_url, name=OWNER[0], password=OWNER[1])
 
     submitted = _preset_card(page, "preset-1")
     approved = _preset_card(page, "preset-2")
@@ -148,12 +205,11 @@ def test_preset_status_mix_submitted_and_approved(page: Page, base_url: str) -> 
 
 
 def test_preset_submission_program_results_report_viewable(page: Page, base_url: str) -> None:
-    """プリセット(#53)を審査ビューで開くと、プログラム＋結果＋レポートが閲覧できる。"""
-    open_dataset_as(page, base_url, name="保田 オーナー", role="owner")
+    """プリセット(#53)を専用ページで開くと、プログラム＋結果＋レポートが閲覧できる(#64)。"""
+    open_dataset_as(page, base_url, name=OWNER[0], password=OWNER[1])
 
-    _preset_card(page, "preset-1").get_by_test_id("review-open").click()
+    _open_submission_page(page, _preset_card(page, "preset-1"))
     review = page.get_by_test_id("review-view")
-    expect(review).to_be_visible()
     # プログラム(コード)が x-text 表示される(既存ビューアを再利用)。
     expect(review.get_by_test_id("review-program-code")).to_contain_text("KMeans")
     # 結果(テキスト)が表示される。
@@ -162,26 +218,32 @@ def test_preset_submission_program_results_report_viewable(page: Page, base_url:
     expect(review.get_by_test_id("review-report-shown")).to_contain_text("プリセット")
 
 
-def test_preset_approved_shows_review_result_button(page: Page, base_url: str) -> None:
-    """承認済みプリセットは「審査結果を見る」で開け、承認ボタンが無効(#53)。"""
-    open_dataset_as(page, base_url, name="保田 オーナー", role="owner")
+def test_preset_approved_shows_review_result_button_and_seeded_comment(
+    page: Page, base_url: str
+) -> None:
+    """承認済みプリセットは「審査結果を見る →」で開け、承認ボタンが無効で seed コメントが見える。"""
+    open_dataset_as(page, base_url, name=OWNER[0], password=OWNER[1])
 
     approved = _preset_card(page, "preset-2")
-    expect(approved.get_by_test_id("review-open")).to_have_text("審査結果を見る")
-    approved.get_by_test_id("review-open").click()
+    expect(approved.get_by_test_id("review-open")).to_have_text("審査結果を見る →")
+    _open_submission_page(page, approved)
     review = page.get_by_test_id("review-view")
-    expect(review).to_be_visible()
     expect(review.get_by_test_id("review-program-code")).to_contain_text("log_dose")
     expect(review.get_by_test_id("review-approve")).to_be_disabled()
+    # デモ用 seed コメント(#64)が一覧に出る。
+    expect(page.get_by_test_id("comment-item").first).to_contain_text("用量反応の方向性")
 
 
 def test_preset_does_not_collide_with_user_submission_ids(page: Page, base_url: str) -> None:
     """プリセット(preset-<n>)が seq を進めず、ユーザー提出は sub-<n> でユニーク採番(#53)。"""
-    open_dataset_as(page, base_url, name="分析 太郎", role="analyst")
+    open_dataset_as(page, base_url, name=ANALYST[0], password=ANALYST[1])
 
-    # デモ提出を 2 回 → 別々の sub-<n> が付き、プリセットと混ざらない。
+    # デモ提出は「フォーム記入のみ」(#65)。記入→提出 を 2 回行うと、別々の sub-<n> が
+    # 付き、プリセットと混ざらない。
     page.get_by_test_id("submit-demo").click()
+    page.get_by_test_id("submit-to-dataset").click()
     page.get_by_test_id("submit-demo").click()
+    page.get_by_test_id("submit-to-dataset").click()
     user_cards = page.locator("[data-testid='submission-card'][data-submission-id^='sub-']")
     expect(user_cards).to_have_count(2)
     ids = user_cards.evaluate_all("els => els.map(e => e.getAttribute('data-submission-id'))")

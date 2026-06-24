@@ -5,8 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>合成データで安全に研究データを共有する — デモ</title>
   <link rel="stylesheet" href="assets/app.css" />
-  <!-- Chart.js は同期読込(フラグメント内の描画スクリプトより先に定義させる) -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <!-- htmx: フラグメント(静的HTML / 本番ではFastAPI応答)を hx-get で読み込む -->
   <script defer src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.3/dist/htmx.min.js"></script>
   <!-- Alpine.js: ログイン状態(共有ストア)と 3ロールのワークフロー状態機械を管理 -->
@@ -19,18 +17,24 @@
     本番では TRE/サーバー側のセッションと認可で隔離する(ここはあくまで UI 上の擬似)。
 
     ビュー: login | top | register | explore(カタログ一覧) | dataset(個別ページ)
-    カタログ一覧・個別ページは「誰でも閲覧可」: ログイン不要でアクセスできる。
+          | submission(提出物 個別ページ = 審査・コメント面, #64)
+    カタログ一覧・個別ページ・提出物ページは「誰でも閲覧可」: ログイン不要でアクセスできる。
     register(データ登録)のみ owner 専用ガードを掛ける。
+    提出物ページの【承認】は owner 限定、【コメント】はログイン中ユーザー全員(#64)。
   -->
   <script>
     document.addEventListener("alpine:init", () => {
       Alpine.store("session", {
         user: null, // { name, role } | null
-        view: "login", // login | top | register | explore | dataset
+        view: "login", // login | top | register | explore | dataset | submission
         currentDatasetId: null, // dataset ビューで表示中のデータセット
+        currentSubmissionId: null, // submission ビューで表示中の提出物(#64)
+        // プリセット(デモ)アカウント。ロールは「アカウントに紐づく」(画面で選ばない)。
+        // password は擬似デモ用の平文定数(本物の認証・ハッシュ化はしない)。モックのため
+        // パスワードは UI 上でも開示してログインできるようにする(login-hint)。
         presets: [
-          { name: "保田 オーナー", role: "owner" },
-          { name: "分析 太郎", role: "analyst" },
+          { name: "保田 オーナー", role: "owner", password: "owner-demo" },
+          { name: "分析 太郎", role: "analyst", password: "analyst-demo" },
         ],
         isAuthed() {
           return this.user !== null;
@@ -38,10 +42,15 @@
         roleLabel(role) {
           return { owner: "データオーナー", analyst: "分析者" }[role] || role;
         },
-        login(name, role) {
+        // 擬似ログイン: ユーザー名＋パスワード(擬似)。実認証・ハッシュ化はしない。
+        // 入力ユーザー名に一致するプリセットを探し、パスワードも一致したらログイン成立。
+        // ロールはアカウント(プリセット)に紐づく値を採用する(画面では選ばない)。
+        // パスワードは user に保持しない(メモリ上の照合のみ)。
+        login(name, password) {
           const trimmed = (name || "").trim();
-          if (!trimmed || (role !== "owner" && role !== "analyst")) return false;
-          this.user = { name: trimmed, role };
+          const preset = this.presets.find((p) => p.name === trimmed);
+          if (!preset || preset.password !== password) return false;
+          this.user = { name: preset.name, role: preset.role };
           this.view = "top";
           return true;
         },
@@ -50,11 +59,14 @@
           this.view = "login";
         },
         // 公開閲覧できるビュー(ログイン不要)。
+        // 提出物ページ(submission, #64)も dataset と同様に閲覧自体は公開とする
+        // (承認は owner 限定 / コメントは要ログインを各操作側でガードする)。
         isPublicView(view) {
           return (
             view === "login" ||
             view === "explore" ||
-            view === "dataset"
+            view === "dataset" ||
+            view === "submission"
           );
         },
         go(view) {
@@ -74,6 +86,14 @@
         openDataset(datasetId) {
           this.currentDatasetId = datasetId;
           this.view = "dataset";
+        },
+        // 提出物の個別ページ(審査・コメント面, #64)を開く。データセット個別ページの
+        // 提出物カードから遷移する。閲覧自体は公開(承認は owner 限定・コメントは要ログイン)。
+        // dataset 側の文脈(currentDatasetId)も合わせて保持し、戻る導線で個別ページへ復帰できる。
+        openSubmission(datasetId, submissionId) {
+          this.currentDatasetId = datasetId;
+          this.currentSubmissionId = submissionId;
+          this.view = "submission";
         },
       });
 
@@ -153,6 +173,9 @@
       //       analyst: string,     // 提出者(ログイン中ユーザー名)
       //       status: string,      // "submitted"(初期値。審査で approved へ遷移 = #42)
       //       submittedAt: string, // ISO8601 文字列
+      //       comments: [          // 提出物への対話コメント(#64。owner/analyst 双方が追記可)
+      //         { author: string, text: string, at: string(ISO8601) }
+      //       ],
       //       // 審査(#42)で reviewedBy / reviewedAt を追記する。
       //     }
       //   旧スキーマ(analysis/analysisTitle/codeExcerpt = 分析選択型)から、実際の
@@ -196,6 +219,22 @@
           s.reviewedAt = new Date().toISOString();
           return s;
         },
+        // 提出物へコメントを 1 件追記する(#64)。owner / analyst 双方が追記でき、
+        // 著者はログイン中ユーザー名、時刻はサーバー時刻の擬似として ISO8601 を付ける。
+        // comments 配列が未初期化なら初期化する(プリセット/旧データに無くても安全)。
+        // in-memory のため提出物個別ページのコメント一覧へ即時反映される。
+        addComment(datasetId, submissionId, { author, text }) {
+          const s = this.find(datasetId, submissionId);
+          if (!s) return null;
+          if (!Array.isArray(s.comments)) s.comments = [];
+          const comment = {
+            author: author || "anonymous",
+            text: text || "",
+            at: new Date().toISOString(),
+          };
+          s.comments.push(comment);
+          return comment;
+        },
         // 仮想(プリセット)提出物の初期配置(#53)。提出物一覧/審査が初回から空でない
         // ようにデモ用の架空提出物を 1 度だけ流し込む。各 preset は明示 id("preset-<n>")
         // を持つため "sub-<n>" 採番(seq)とは衝突しない(seq はユーザー提出のみ進む)。
@@ -213,6 +252,8 @@
               ...p,
               // 結果配列は共有定義由来のため浅いコピーで実体を分ける(参照共有を避ける)。
               results: (p.results || []).map((r) => ({ ...r })),
+              // コメント配列(#64)も実体を分け、addComment の追記が定義側を汚さないようにする。
+              comments: (p.comments || []).map((c) => ({ ...c })),
               isPreset: true, // デモ成果物であることの目印(UI バッジ用)
             });
           }
@@ -276,20 +317,33 @@
              x-show="$store.session.view === 'login'" x-cloak
              x-data="loginForm()">
       <h2>ログイン</h2>
-      <p>擬似ログインです。実際の認証は行いません。プリセットを選ぶか、ユーザー名を入力し
-        ロールを選んでください。</p>
+      <p>擬似ログインです(ユーザー名＋パスワード)。<strong>実際の認証は行いません</strong>。
+        ロールは<strong>アカウントに紐づく</strong>ため画面では選びません。下のプリセット
+        アカウントを選ぶと、ユーザー名とデモ用パスワードが自動入力されます。</p>
 
       <div class="login-presets">
-        <span class="login-label">プリセットユーザー</span>
+        <span class="login-label">プリセットアカウント(デモ)</span>
         <template x-for="p in $store.session.presets" :key="p.name">
           <button class="chip" type="button"
                   :data-testid="'preset-' + p.role"
-                  @click="name = p.name; role = p.role">
+                  @click="name = p.name; password = p.password; error = ''">
             <span x-text="p.name"></span>
-            <small x-text="'(' + $store.session.roleLabel(p.role) + ')'"></small>
+            <small x-text="'(' + $store.session.roleLabel(p.role) + ' / デモアカウント)'"></small>
           </button>
         </template>
       </div>
+
+      <!-- モックのためデモ用パスワードを開示する(これがないとログインできない) -->
+      <p class="login-hint frag-note" data-testid="login-hint">
+        デモ用アカウント(平文・擬似):
+        <template x-for="p in $store.session.presets" :key="p.name">
+          <span class="login-hint-item">
+            <code x-text="p.name"></code> /
+            <code x-text="p.password"></code>
+            <small x-text="'(' + $store.session.roleLabel(p.role) + ')'"></small>
+          </span>
+        </template>
+      </p>
 
       <form class="login-form" @submit.prevent="doLogin()">
         <label class="field">
@@ -298,19 +352,11 @@
                  placeholder="例: 分析 太郎" autocomplete="off" />
         </label>
 
-        <fieldset class="field role-field">
-          <legend class="login-label">ロール</legend>
-          <label class="radio">
-            <input type="radio" name="role" value="owner" x-model="role"
-                   data-testid="role-owner" />
-            <span>データオーナー (owner)</span>
-          </label>
-          <label class="radio">
-            <input type="radio" name="role" value="analyst" x-model="role"
-                   data-testid="role-analyst" />
-            <span>分析者 (analyst)</span>
-          </label>
-        </fieldset>
+        <label class="field">
+          <span class="login-label">パスワード</span>
+          <input type="password" data-testid="login-password" x-model="password"
+                 placeholder="デモ用パスワード" autocomplete="off" />
+        </label>
 
         <p class="login-error" data-testid="login-error" x-show="error" x-cloak
            x-text="error"></p>
@@ -358,7 +404,7 @@
     <!--
       合成データ+メタデータの新規登録(擬似)。owner 専用。
       確定仮定: ブラウザで合成データは生成しない。メタデータ + (同梱サンプル選択 or
-      JSON アップロード)した「ダミーデータプレビュー」を共有ストアに追加するのみ。
+      CSV アップロード)した「ダミーデータプレビュー」を共有ストアに追加するのみ。
       本番では TRE 内で合成データを生成・検証し、その結果をカタログに載せる。
       登録分は in-memory(ハードリロードでリセット)。すべて架空データ。
     -->
@@ -375,26 +421,29 @@
       <!-- 擬似モックである旨・架空データである旨の注記(SPEC と整合) -->
       <p class="register-disclaimer" data-testid="register-disclaimer">
         ⚠️ これは<strong>静的モック</strong>です。ブラウザ上で合成データ生成は行いません。
-        登録は<strong>メタデータ＋（同梱サンプル選択 or JSON アップロードした）ダミーデータ</strong>を
+        登録は<strong>メタデータ＋（同梱サンプル選択 or CSV アップロードした）ダミーデータ</strong>を
         メモリ上のカタログに追加するだけで、ハードリロードで消えます。本番では TRE
         (Trusted Research Environment)内で生データから合成データを生成・検証します。
         <strong>ここで扱うデータはすべて架空</strong>です(実患者データを入力しないでください)。</p>
 
-      <!-- ---- デモ用ワンクリック登録(#55) ---- -->
+      <!-- ---- デモ用フォーム記入(#55/#62) ---- -->
       <!--
-        手入力なしで「登録 → カタログ反映 → 個別ページ」を素早く見せるための
-        デモ専用ショートカット。owner 限定の register ビュー内にあるので追加ガードは不要。
-        通常の手入力フォームと同じ catalog.register() を通すため、登録結果は手動登録と同一。
+        手入力なしでフォームを素早く埋めるためのデモ専用ショートカット。
+        owner 限定の register ビュー内にあるので追加ガードは不要。
+        #62 で挙動を変更: 登録・遷移はせず、下の手入力フォームを架空データで埋めるだけ。
+        ダミーデータ指定(同梱サンプル)もセットして submit-ready にするので、
+        ユーザーが「カタログに登録する」を押せば通常の手入力と同じ catalog.register() を通る。
         架空データである旨を添える(本番では使わない便宜機能)。
       -->
       <section class="reg-demo" data-testid="reg-demo">
         <div class="reg-demo-text">
           <strong>デモを素早く試す</strong>
-          <p class="frag-note">手入力なしで架空のデモ用データセットをカタログに登録します
-            (便宜機能・架空データ)。登録後は新規データセットの個別ページを開きます。</p>
+          <p class="frag-note">手入力なしで架空のデモ用データセットの内容をフォームに記入します
+            (便宜機能・架空データ)。<strong>記入のみで登録はしません</strong>。
+            内容を確認したら下の「カタログに登録する」で登録してください。</p>
         </div>
         <button class="primary" type="button" data-testid="reg-demo-register"
-                @click="registerDemo()">デモ用データを登録</button>
+                @click="registerDemo()">デモ用データでフォームを記入</button>
       </section>
 
       <form class="register-form" @submit.prevent="submit()">
@@ -440,7 +489,7 @@
         <fieldset class="field reg-source">
           <legend class="login-label">ダミーデータの指定 <span class="req">*</span></legend>
           <p class="frag-note">ブラウザで合成データは生成しません。
-            <strong>同梱サンプルから選ぶ</strong>か、<strong>JSON をアップロード</strong>してください。</p>
+            <strong>同梱サンプルから選ぶ</strong>か、<strong>CSV をアップロード</strong>してください。</p>
 
           <label class="radio">
             <input type="radio" name="reg-source" value="sample" x-model="source"
@@ -459,14 +508,15 @@
           <label class="radio">
             <input type="radio" name="reg-source" value="upload" x-model="source"
                    data-testid="reg-source-upload" />
-            <span>JSON ファイルをアップロード</span>
+            <span>CSV ファイルをアップロード</span>
           </label>
           <div class="reg-source-body" x-show="source === 'upload'" x-cloak>
-            <input type="file" accept="application/json,.json"
+            <input type="file" accept="text/csv,.csv"
                    data-testid="reg-file" @change="onFile($event)" />
-            <p class="frag-note">形式: <code>{ "patients": [...], "psa_measurements": [...],
-              "medications": [...] }</code> のいずれかのテーブルを含む JSON。
-              先頭数行をダミープレビューに使います。</p>
+            <p class="frag-note">形式: 先頭行がヘッダ(列名)の <strong>CSV ファイル</strong>。
+              1 ファイル = 1 テーブル(<code>patients</code> / <code>psa_measurements</code> /
+              <code>medications</code> のいずれか)。ヘッダの列名でテーブルを自動判定し、
+              先頭数行をダミープレビューに使います(合成データの CSV ダウンロードと同形)。</p>
             <p class="reg-filestatus" data-testid="reg-file-status"
                x-show="uploadStatus" x-cloak x-text="uploadStatus"></p>
           </div>
@@ -787,49 +837,53 @@
               </div>
 
               <!--
-                デモ用ワンクリック提出(#55 の登録ボタンと同思想・便宜機能)。
+                デモ用サンプルでフォームを記入(#65。#62 の登録フォームと同思想・便宜機能)。
                 ファイルを用意せず、内蔵のサンプル(プログラム＋結果テキスト＋所見)を
-                そのまま submissions.add() へ流し、提出→審査フローを素早く試せる。
-                提出は要ログインなので手動提出と同じ認証ガード(未ログインで無効化)。
-                サンプルは複数あり、クリックごとに次を巡回提出する。
-                プログラムは実行されず、表示・保管のみ(手動提出と同じ)。
+                フォーム状態へ流し込むだけ。提出はせず、ユーザーが上の提出ボタンで送信する。
+                記入は要ログインなので手動提出と同じ認証ガード(未ログインで無効化)。
+                サンプルは複数あり、クリックごとに次のサンプルで記入し直す。
+                プログラムは実行されず、表示・保管のみ(手動記入と同じ)。
               -->
               <div class="reg-demo submit-demo" data-testid="submit-demo-box">
                 <div class="reg-demo-text">
                   <strong>デモを素早く試す</strong>
                   <p class="frag-note">ファイル準備なしで、内蔵の架空サンプル
-                    (分析プログラム＋結果＋所見)をそのまま提出します(便宜機能)。
-                    クリックごとに次のサンプルを提出します。提出物は実行されず表示のみ。</p>
+                    (分析プログラム＋結果＋所見)を上のフォームに記入します(便宜機能)。
+                    記入後、<strong>上の「プログラム＋結果を提出する」</strong>で送信してください。
+                    クリックごとに次のサンプルで記入し直します。提出物は実行されず表示のみ。</p>
                 </div>
                 <button class="ghost" type="button" data-testid="submit-demo"
                         @click="submitDemo()"
                         :disabled="!$store.session.isAuthed()"
                         :title="!$store.session.isAuthed()
-                          ? 'ログインすると提出できます' : ''">
-                  デモ用のサンプルを提出</button>
+                          ? 'ログインするとフォームに記入できます' : ''">
+                  デモ用サンプルでフォームを記入</button>
               </div>
             </div>
             </template>
           </section>
 
           <!--
-            紐づく提出物一覧(#41 が書き込む)＋審査(#42, N3)。各カードは提出物の概要
-            (プログラム名・結果件数・レポート・status)を表示する。owner だけに「審査する」導線を
-            出し(擬似ガード)、選んだ提出物の【プログラム(コード)＋結果(画像/テキスト)＋レポート】を
-            閲覧 → 承認で status を approved に遷移させる。生データ並置(合成≈生)はここでは行わない。
+            紐づく提出物一覧(#41 が書き込む)。各カードは提出物の概要(プログラム名・
+            結果件数・レポート・status)を表示する。提出物の詳細閲覧・コメント・審査(承認)は
+            専用の【提出物個別ページ】(submission ビュー, #64)へ遷移して行う(インライン審査は
+            #64 で撤去)。owner だけに「審査する →」導線を出し(擬似ガード)、非 owner には
+            「詳細を見る →」導線(閲覧のみ)を出す。
           -->
           <section class="dataset-section" data-testid="dataset-submissions"
                    x-data="reviewPanel()">
             <h3>紐づく提出物</h3>
             <p class="frag-note">このデータセットの<strong>合成データ</strong>に対して提出された
               プログラム＋結果の一覧です。上のフォームから提出するとここに追加されます。
-              <strong x-show="canReview()" x-cloak>オーナーは各提出物を選び、プログラムと結果を
+              各提出物の<strong>詳細・コメント・審査</strong>は提出物の個別ページで行います。
+              <strong x-show="canReview()" x-cloak>オーナーは各提出物を開き、プログラムと結果を
               確認して承認できます。</strong></p>
 
-            <!-- 非 owner には審査導線が出ない旨の注記(擬似ガード)。 -->
+            <!-- 非 owner には審査(承認)導線が出ない旨の注記(擬似ガード)。 -->
             <p class="frag-note review-guard-note" data-testid="review-guard"
                x-show="$store.session.isAuthed() && !canReview()" x-cloak>
-              提出物の審査は<strong>データオーナー</strong>のみ行えます。</p>
+              提出物の<strong>承認</strong>は<strong>データオーナー</strong>のみ行えます
+              (閲覧・コメントは可能です)。</p>
 
             <div class="submission-list"
                  data-testid="submission-list"
@@ -861,105 +915,165 @@
                   <p class="submission-report" data-testid="submission-report"
                      x-show="s.report" x-cloak x-text="s.report"></p>
 
-                  <!-- 審査導線(owner 限定) -->
-                  <div class="actions" x-show="canReview()" x-cloak>
+                  <!--
+                    提出物個別ページ(submission, #64)への遷移。owner には審査文言、
+                    非 owner には閲覧文言を出す(どちらも openSubmission で同じページへ)。
+                    review-open testid は審査起点として維持する(#64: インライン審査→ページ遷移)。
+                  -->
+                  <div class="actions">
                     <button class="primary" data-testid="review-open"
-                            @click="openReview(s)"
-                            x-show="reviewingId !== s.id"
-                            x-text="s.status === 'approved'
-                              ? '審査結果を見る' : '審査する →'"></button>
-                    <button class="ghost" data-testid="review-close"
-                            @click="closeReview()"
-                            x-show="reviewingId === s.id">審査を閉じる</button>
+                            @click="$store.session.openSubmission(dataset.dataset_id, s.id)"
+                            x-text="canReview()
+                              ? (s.status === 'approved' ? '審査結果を見る →' : '審査する →')
+                              : '詳細を見る →'"></button>
                   </div>
                 </div>
               </template>
             </div>
-
-            <!--
-              提出物審査ビュー(owner 限定, #42)。一覧で選んだ提出物の【プログラム(コード)＋
-              結果(画像/テキスト)＋レポート】を表示し、承認で status を approved に遷移させる。
-              アップロードされたプログラムは実行せず x-text 表示、画像は提出時の dataURL を
-              そのまま表示する(生データ並置はしない)。
-            -->
-            <section class="review-panel" data-testid="review-view"
-                     x-show="reviewing" x-cloak>
-              <template x-if="reviewing">
-              <div>
-                <h3>提出物を審査する：
-                  <span data-testid="review-program-name"
-                        x-text="reviewing.program?.name || 'program'"></span></h3>
-                <p>分析者がアップロードした<strong>プログラムと結果</strong>を確認します。
-                  プログラムは実行されません(本番では TRE 内でオーナーがレビュー後に生データへ
-                  適用)。問題なければ承認してください。</p>
-
-                <!-- 提出レポート(所見/メモ) -->
-                <div class="review-report" data-testid="review-report-shown"
-                     x-show="reviewing.report" x-cloak>
-                  <h4>提出レポート</h4>
-                  <p class="submission-report" x-text="reviewing.report"></p>
-                </div>
-                <p class="submission-meta">
-                  <span class="catalog-owner">👤 <span x-text="reviewing.analyst"></span></span>
-                  <span class="submission-when"
-                        x-text="new Date(reviewing.submittedAt).toLocaleString('ja-JP')"></span>
-                </p>
-
-                <!-- プログラム(コード)。x-text で文字列表示(実行しない)。 -->
-                <div class="review-program" data-testid="review-program">
-                  <h4>分析プログラム
-                    (<span x-text="reviewing.program?.name || 'program'"></span>)</h4>
-                  <pre class="frag-code-block"><code data-testid="review-program-code"
-                    x-text="reviewing.program?.text"></code></pre>
-                </div>
-
-                <!-- 結果(画像/テキスト)。画像は提出時 dataURL、テキストは x-text。 -->
-                <div class="review-results" data-testid="review-results">
-                  <h4>提出された結果</h4>
-                  <template x-for="(r, ri) in (reviewing.results || [])" :key="ri">
-                    <div class="review-result" data-testid="review-result"
-                         :data-result-type="r.type">
-                      <template x-if="r.type === 'image'">
-                        <figure class="review-result-figure">
-                          <img :src="r.content" :alt="r.name" class="result-thumb" />
-                          <figcaption class="reg-filestatus" x-text="r.name"></figcaption>
-                        </figure>
-                      </template>
-                      <template x-if="r.type === 'text'">
-                        <div>
-                          <h5 x-text="r.name"></h5>
-                          <pre class="result-text" x-text="r.content"></pre>
-                        </div>
-                      </template>
-                    </div>
-                  </template>
-                </div>
-
-                <div class="actions">
-                  <button class="primary" data-testid="review-approve"
-                          @click="approve()"
-                          :disabled="reviewing.status === 'approved'"
-                          x-text="reviewing.status === 'approved'
-                            ? '承認済み ✓' : '承認する'"></button>
-                  <button class="ghost" data-testid="review-view-close"
-                          @click="closeReview()">閉じる</button>
-                </div>
-
-                <p class="review-callout" data-testid="review-callout"
-                   x-show="reviewing.status === 'approved'" x-cloak>
-                  ✅ この提出物を<strong>承認しました</strong>。本番では TRE 内で同じプログラムを
-                  生データへ適用し、結果(本物のレポート)を作成します。</p>
-              </div>
-              </template>
-            </section>
           </section>
         </div>
+      </template>
+    </section>
+
+    <!-- ======================= 提出物 個別ページ(審査・コメント, #64) ======================= -->
+    <!--
+      提出物の専用ページ(submission ビュー)。データセット個別ページの提出物カードから
+      openSubmission(datasetId, submissionId) で遷移する。共有ストア submissions.find() の実体を
+      読み、【プログラム(コード)＋結果(画像/テキスト)＋レポート】を閲覧し、コメント(全ログイン
+      ユーザー可)＋承認(owner 限定)を行う。インライン審査(#42)からの移設。生データ並置はしない。
+      閲覧自体は公開(未ログインでも開ける)。承認は owner 限定・コメントは要ログインで個別にガード。
+    -->
+    <section class="submission-view" data-testid="submission-view"
+             x-show="$store.session.view === 'submission'" x-cloak
+             x-data="submissionPage()">
+      <div class="actions dataset-back">
+        <button class="ghost" data-testid="submission-back"
+                @click="$store.session.openDataset($store.session.currentDatasetId)">
+          ← データセットへ戻る</button>
+      </div>
+
+      <!-- 対象提出物が見つからない場合の安全なフォールバック(クラッシュさせない)。 -->
+      <p class="placeholder" data-testid="submission-not-found"
+         x-show="!submission" x-cloak>
+        対象の提出物が見つかりません。データセットの提出物一覧から開いてください。</p>
+
+      <template x-if="submission">
+      <div class="review-panel" data-testid="review-view"
+           :data-submission-id="submission.id" :data-status="submission.status">
+        <h2>提出物：
+          <span data-testid="review-program-name"
+                x-text="submission.program?.name || 'program'"></span></h2>
+        <p>分析者がアップロードした<strong>プログラムと結果</strong>を確認します。
+          プログラムは実行されません(本番では TRE 内でオーナーがレビュー後に生データへ
+          適用)。問題なければオーナーが承認します。閲覧者は誰でもコメントできます。</p>
+
+        <!-- 提出レポート(所見/メモ) -->
+        <div class="review-report" data-testid="review-report-shown"
+             x-show="submission.report" x-cloak>
+          <h4>提出レポート</h4>
+          <p class="submission-report" x-text="submission.report"></p>
+        </div>
+        <p class="submission-meta">
+          <span class="catalog-owner">👤 <span x-text="submission.analyst"></span></span>
+          <span class="submission-when"
+                x-text="new Date(submission.submittedAt).toLocaleString('ja-JP')"></span>
+          <span class="role-pill" data-testid="submission-status"
+                :class="{ approved: submission.status === 'approved' }"
+                x-text="submission.status"></span>
+        </p>
+
+        <!-- プログラム(コード)。x-text で文字列表示(実行しない)。 -->
+        <div class="review-program" data-testid="review-program">
+          <h4>分析プログラム
+            (<span x-text="submission.program?.name || 'program'"></span>)</h4>
+          <pre class="frag-code-block"><code data-testid="review-program-code"
+            x-text="submission.program?.text"></code></pre>
+        </div>
+
+        <!-- 結果(画像/テキスト)。画像は提出時 dataURL、テキストは x-text。 -->
+        <div class="review-results" data-testid="review-results">
+          <h4>提出された結果</h4>
+          <template x-for="(r, ri) in (submission.results || [])" :key="ri">
+            <div class="review-result" data-testid="review-result"
+                 :data-result-type="r.type">
+              <template x-if="r.type === 'image'">
+                <figure class="review-result-figure">
+                  <img :src="r.content" :alt="r.name" class="result-thumb" />
+                  <figcaption class="reg-filestatus" x-text="r.name"></figcaption>
+                </figure>
+              </template>
+              <template x-if="r.type === 'text'">
+                <div>
+                  <h5 x-text="r.name"></h5>
+                  <pre class="result-text" x-text="r.content"></pre>
+                </div>
+              </template>
+            </div>
+          </template>
+        </div>
+
+        <!-- 承認(owner 限定)。submitted -> approved に遷移し、一覧へも即時反映。 -->
+        <div class="actions" x-show="canReview()" x-cloak>
+          <button class="primary" data-testid="review-approve"
+                  @click="approve()"
+                  :disabled="submission.status === 'approved'"
+                  x-text="submission.status === 'approved'
+                    ? '承認済み ✓' : '承認する'"></button>
+        </div>
+
+        <p class="review-callout" data-testid="review-callout"
+           x-show="submission.status === 'approved'" x-cloak>
+          ✅ この提出物を<strong>承認しました</strong>。本番では TRE 内で同じプログラムを
+          生データへ適用し、結果(本物のレポート)を作成します。</p>
+
+        <!--
+          コメント面(#64)。提出物への対話。一覧は x-text のみで描画(x-html 禁止 = XSS 安全)。
+          コメント追記は要ログイン(owner / analyst 双方が可能)。著者はログイン中ユーザー名。
+        -->
+        <section class="review-comments" data-testid="review-comments">
+          <h4>コメント</h4>
+          <div class="comment-list" data-testid="comment-list">
+            <p class="placeholder" data-testid="comment-empty"
+               x-show="comments().length === 0">
+              まだコメントはありません。</p>
+            <template x-for="(c, ci) in comments()" :key="ci">
+              <div class="card comment-item" data-testid="comment-item">
+                <p class="comment-head">
+                  <strong class="comment-author" x-text="c.author"></strong>
+                  <span class="comment-when"
+                        x-text="new Date(c.at).toLocaleString('ja-JP')"></span>
+                </p>
+                <p class="comment-text" x-text="c.text"></p>
+              </div>
+            </template>
+          </div>
+
+          <!-- コメント追記フォーム(要ログイン)。未ログインは入力不可＋導線を出す。 -->
+          <div class="comment-form" x-show="$store.session.isAuthed()" x-cloak>
+            <label class="field">
+              <span class="login-label">コメントを追加</span>
+              <textarea data-testid="comment-input" x-model="draft" rows="3"
+                placeholder="プログラム・結果への所見や質問を記入(owner / analyst 双方が可能)。"></textarea>
+            </label>
+            <p class="login-error" data-testid="comment-error"
+               x-show="commentError" x-cloak x-text="commentError"></p>
+            <div class="actions">
+              <button class="primary" data-testid="comment-submit"
+                      @click="addComment()">コメントする</button>
+            </div>
+          </div>
+          <p class="submit-hint" data-testid="comment-need-login"
+             x-show="!$store.session.isAuthed()" x-cloak>
+            コメントにはログインが必要です。
+            <a href="#" @click.prevent="$store.session.go('login')">ログインへ</a></p>
+        </section>
+      </div>
       </template>
     </section>
   </main>
 
   <footer class="site-foot">
-    <p>静的デモ (GitHub Pages) — htmx + Alpine.js + Chart.js。データと分析は Python
+    <p>静的デモ (GitHub Pages) — htmx + Alpine.js。データと分析は Python
       (pandas / scikit-learn) で事前計算。
       <a href="../docs/SPEC.md">仕様書</a></p>
   </footer>
@@ -969,7 +1083,14 @@
     // 共有ストア catalog に擬似登録する。ブラウザで合成データは生成しない。
     function registerForm() {
       // ダミープレビューとして許可するテーブルと列(catalog.json の dummy_preview と同形)。
-      const PREVIEW_TABLES = ["patients", "psa_measurements", "medications"];
+      // CSV アップロード(#63)はヘッダ列名をこの whitelist と突き合わせてテーブルを自動判定する。
+      // この定義が「許可テーブル/列」の唯一のソース(JSON 由来だった sanitizePreview から移行)。
+      const PREVIEW_SCHEMA = {
+        patients: ["patient_id", "age", "risk_group", "enrollment_date"],
+        psa_measurements: ["patient_id", "date", "psa"],
+        medications: ["patient_id", "datetime", "drug", "dose_mg"],
+      };
+      const PREVIEW_TABLES = Object.keys(PREVIEW_SCHEMA);
       const MAX_PREVIEW_ROWS = 5;
       return {
         form: {
@@ -982,59 +1103,34 @@
         uploadStatus: "",
         error: "",
         success: "",
-        demoSeq: 0,           // デモ用データセットの巡回インデックス(#55)
-        // デモ用ワンクリック登録(#55)で使う架空データセット定義。
-        // catalog.json の datasets[] と同形(title/description/owner/domain/tags/
-        // usage_examples/n_patients/dummy_preview)。owner は登録時に補完する。
-        // 分析フラグメント(synthetic/raw)は持たないため、個別ページでは
-        // メタデータ+ダミーのみ表示され、合成データ DL は出ない(hasSyntheticDownload=false)。
-        // 複数定義し、クリックごとに次を登録する(巡回)。
+        demoSeq: 0,           // デモ用データセット定義の巡回インデックス(#55/#62)
+        // デモ用「フォーム記入」(#62)で使う架空データセット定義。
+        // 登録はしない: これらの値で手入力フォームを埋め、ユーザーが reg-submit で確定する。
+        // sampleId は samples[] の有効な id を指す(これでダミーデータ指定が submit-ready になる)。
+        // tags/usage は手入力フォームと同じ raw 文字列(tagsRaw=カンマ区切り, usageRaw=改行区切り)。
+        // 複数定義し、クリックごとに次の定義でフォームを埋める(巡回)。
         demoDatasets: [
           {
             title: "心不全 再入院リスク コホート(デモ)",
             description: "退院後 30 日以内の再入院に関連する指標を集めた架空コホート。" +
               "デモ用の合成/ダミーデータで、実患者データは一切含みません。",
             domain: "cardiology",
-            tags: ["heart-failure", "readmission", "longitudinal"],
-            usage_examples: [
-              "再入院リスクのロジスティック回帰でリスク因子を同定する",
+            tagsRaw: "heart-failure, readmission, longitudinal",
+            usageRaw: "再入院リスクのロジスティック回帰でリスク因子を同定する\n" +
               "退院後フォローアップ間隔と再入院率の関連を可視化する",
-            ],
             n_patients: 180,
-            dummy_preview: {
-              patients: [
-                { patient_id: "HF-001", age: 72, risk_group: "high", enrollment_date: "2023-01-12" },
-                { patient_id: "HF-002", age: 64, risk_group: "moderate", enrollment_date: "2023-02-03" },
-                { patient_id: "HF-003", age: 81, risk_group: "high", enrollment_date: "2023-02-20" },
-              ],
-              medications: [
-                { patient_id: "HF-001", datetime: "2023-01-13T08:30", drug: "furosemide", dose_mg: 40 },
-                { patient_id: "HF-002", datetime: "2023-02-04T09:15", drug: "carvedilol", dose_mg: 12 },
-              ],
-            },
+            sampleId: "renal-egfr",
           },
           {
             title: "2 型糖尿病 HbA1c 推移(デモ)",
             description: "血糖管理マーカー(HbA1c)の経時推移を含む架空データセット。" +
               "デモ用のダミーデータのみで、生データは共有されません。",
             domain: "endocrinology",
-            tags: ["diabetes", "hba1c", "marker"],
-            usage_examples: [
-              "HbA1c 軌跡のクラスタリングで管理パターンを分類する",
+            tagsRaw: "diabetes, hba1c, marker",
+            usageRaw: "HbA1c 軌跡のクラスタリングで管理パターンを分類する\n" +
               "投薬変更前後の HbA1c 変化を比較する",
-            ],
             n_patients: 140,
-            dummy_preview: {
-              patients: [
-                { patient_id: "DM-01", age: 55, risk_group: "moderate", enrollment_date: "2022-09-01" },
-                { patient_id: "DM-02", age: 48, risk_group: "low", enrollment_date: "2022-10-11" },
-              ],
-              psa_measurements: [
-                { patient_id: "DM-01", date: "2022-09-05", psa: 7.2 },
-                { patient_id: "DM-01", date: "2022-12-05", psa: 6.8 },
-                { patient_id: "DM-02", date: "2022-10-15", psa: 6.1 },
-              ],
-            },
+            sampleId: "generic-marker",
           },
         ],
         // 事前同梱サンプル(ブラウザ内蔵の小さなダミー。生成ではなく固定値)。
@@ -1070,7 +1166,10 @@
             },
           },
         ],
-        // アップロードされた JSON を読み、許可テーブルのみを先頭数行に整形して保持する。
+        // アップロードされた CSV(#63)を読み、ヘッダ列でテーブルを自動判定して
+        // 先頭数行を dummy_preview と同形(= { <table>: [行オブジェクト...] })に整形する。
+        // 合成データの CSV ダウンロード(#51)と同じ「1 ファイル = 1 テーブル」前提。
+        // 壊れた CSV / 未知ヘッダでも UI を破綻させない(uploadedPreview は null のまま)。
         onFile(ev) {
           this.error = "";
           this.success = "";
@@ -1083,39 +1182,112 @@
             this.uploadStatus = "ファイルの読み込みに失敗しました。";
           };
           reader.onload = () => {
-            let json;
+            let rows;
             try {
-              json = JSON.parse(reader.result);
+              rows = this.parseCsv(String(reader.result));
             } catch (e) {
-              this.uploadStatus = "JSON の解析に失敗しました(構文エラー)。";
+              this.uploadStatus = "CSV の解析に失敗しました(形式エラー)。";
               return;
             }
-            const preview = this.sanitizePreview(json);
-            if (!preview) {
+            if (!rows || rows.length === 0) {
+              this.uploadStatus = "CSV にデータ行がありません(ヘッダ＋1 行以上が必要です)。";
+              return;
+            }
+            const header = Object.keys(rows[0]);
+            const table = this.detectTable(header);
+            if (!table) {
               this.uploadStatus =
-                "対応するテーブル(patients / psa_measurements / medications)が見つかりません。";
+                "ヘッダの列名から対応テーブル(patients / psa_measurements / medications)を判定できませんでした。";
               return;
             }
-            this.uploadedPreview = preview;
-            const tables = Object.keys(preview).join(", ");
-            this.uploadStatus = "読み込み成功: " + tables;
+            // 許可列のみに絞り、先頭 MAX_PREVIEW_ROWS 行を採用する(dummy_preview と同形)。
+            const allowed = PREVIEW_SCHEMA[table];
+            const clean = rows.slice(0, MAX_PREVIEW_ROWS).map((r) => {
+              const o = {};
+              for (const col of allowed) {
+                if (Object.prototype.hasOwnProperty.call(r, col)) o[col] = r[col];
+              }
+              return o;
+            });
+            this.uploadedPreview = { [table]: clean };
+            this.uploadStatus = "読み込み成功: " + table + "(" + clean.length + " 行)";
           };
           reader.readAsText(file);
         },
-        // 任意 JSON から許可テーブルのみ抽出し、各テーブル先頭 MAX_PREVIEW_ROWS 行に切る。
-        // 壊れた/想定外の入力でも UI を破綻させない(オブジェクト行のみ採用)。
-        sanitizePreview(json) {
-          if (!json || typeof json !== "object" || Array.isArray(json)) return null;
-          const out = {};
+        // CSV ヘッダ列を whitelist と突き合わせ、最も一致するテーブル名を返す(無ければ null)。
+        // 判定基準: ヘッダにそのテーブルの許可列が 1 つ以上含まれ、かつ未知列だけではないこと。
+        // 複数テーブルに一致しうる場合は一致列数が最大のテーブルを選ぶ(同点は定義順で先勝ち)。
+        detectTable(header) {
+          const cols = new Set((header || []).map((h) => String(h)));
+          let best = null;
+          let bestHits = 0;
           for (const name of PREVIEW_TABLES) {
-            const rows = json[name];
-            if (!Array.isArray(rows)) continue;
-            const clean = rows
-              .filter((r) => r && typeof r === "object" && !Array.isArray(r))
-              .slice(0, MAX_PREVIEW_ROWS);
-            if (clean.length) out[name] = clean;
+            const hits = PREVIEW_SCHEMA[name].filter((c) => cols.has(c)).length;
+            if (hits > bestHits) {
+              bestHits = hits;
+              best = name;
+            }
           }
-          return Object.keys(out).length ? out : null;
+          return bestHits > 0 ? best : null;
+        },
+        // 最小の RFC4180 パーサ(#63)。ヘッダ行→行オブジェクト配列に変換する。
+        //   - クォート("..." )内の , / " / 改行を許容
+        //   - クォート内の "" は 1 個の " にエスケープ解除
+        //   - 先頭の BOM を除去し、末尾の空行は無視する
+        //   - 値は文字列として扱う(数値変換はしない: 表示専用のため)
+        // 想定外(列数不揃い等)は欠損を空文字で補い、UI を破綻させない。
+        parseCsv(text) {
+          let s = String(text == null ? "" : text);
+          if (s.charCodeAt(0) === 0xfeff) s = s.slice(1); // BOM 除去
+          const records = [];
+          let field = "";
+          let record = [];
+          let inQuotes = false;
+          let i = 0;
+          const n = s.length;
+          const pushField = () => { record.push(field); field = ""; };
+          const pushRecord = () => { pushField(); records.push(record); record = []; };
+          while (i < n) {
+            const ch = s[i];
+            if (inQuotes) {
+              if (ch === '"') {
+                if (s[i + 1] === '"') { field += '"'; i += 2; continue; }
+                inQuotes = false; i += 1; continue;
+              }
+              field += ch; i += 1; continue;
+            }
+            if (ch === '"') { inQuotes = true; i += 1; continue; }
+            if (ch === ",") { pushField(); i += 1; continue; }
+            if (ch === "\r") { // CRLF / CR を 1 つの改行として扱う
+              pushRecord();
+              if (s[i + 1] === "\n") i += 2; else i += 1;
+              continue;
+            }
+            if (ch === "\n") { pushRecord(); i += 1; continue; }
+            field += ch; i += 1;
+          }
+          // 末尾フィールド/レコードを確定(ファイル末尾に改行が無い場合)。
+          if (field.length > 0 || record.length > 0) pushRecord();
+          // 末尾の空行(空フィールド 1 個だけのレコード)を捨てる。
+          while (
+            records.length > 0 &&
+            records[records.length - 1].length === 1 &&
+            records[records.length - 1][0] === ""
+          ) {
+            records.pop();
+          }
+          if (records.length === 0) return [];
+          const header = records[0].map((h) => String(h).trim());
+          const out = [];
+          for (let r = 1; r < records.length; r += 1) {
+            const cells = records[r];
+            const obj = {};
+            for (let c = 0; c < header.length; c += 1) {
+              obj[header[c]] = c < cells.length ? cells[c] : "";
+            }
+            out.push(obj);
+          }
+          return out;
         },
         // 現在の入力からダミープレビューを決める(source に応じて)。
         resolvePreview() {
@@ -1142,7 +1314,7 @@
           const preview = this.resolvePreview();
           if (!preview) {
             this.error = this.source === "upload"
-              ? "アップロードした JSON から有効なダミーデータを取得できませんでした。"
+              ? "アップロードした CSV から有効なダミーデータを取得できませんでした。"
               : "同梱サンプルを選択してください。";
             return;
           }
@@ -1165,21 +1337,31 @@
           this.success = "登録しました(" + id + ")。データカタログに反映されました。";
           this.resetForm();
         },
-        // デモ用ワンクリック登録(#55)。手入力フォームと同じ catalog.register() を通し、
-        // owner だけを登録時に補完する(他フィールドは demoDatasets 定義をそのまま使用)。
-        // クリックごとに demoDatasets を巡回し、登録直後に新規データセットの個別ページを開く。
+        // デモ用「フォーム記入」(#62)。登録も遷移もしない。手入力フォームを
+        // demoDatasets 定義で埋め、ダミーデータ指定(source=sample + 有効な sampleId)も
+        // セットして submit-ready にする。ユーザーが reg-submit を押して初めて登録される。
+        // クリックごとに次の定義へ巡回する。catalog.register()/openDataset() は呼ばない。
         registerDemo() {
           this.error = "";
           this.success = "";
           const def = this.demoDatasets[this.demoSeq % this.demoDatasets.length];
           this.demoSeq += 1;
-          const entry = {
-            ...def,
-            owner: this.$store.session.user?.name || "owner",
+          // メタデータ各フィールドを定義から記入(手入力と同じ form/raw 文字列に流し込む)。
+          this.form = {
+            title: def.title,
+            description: def.description,
+            domain: def.domain,
+            n_patients: def.n_patients,
+            tagsRaw: def.tagsRaw,
+            usageRaw: def.usageRaw,
           };
-          const id = this.$store.catalog.register(entry);
-          // 登録後は新規データセットの個別ページへ遷移して即座に確認できるようにする。
-          this.$store.session.openDataset(id);
+          // ダミーデータ指定: 同梱サンプルを選択した状態にして submit() のバリデーションを通す。
+          // 定義の sampleId が samples[] に無い場合は先頭サンプルにフォールバックする。
+          const valid = this.samples.some((s) => s.id === def.sampleId);
+          this.source = "sample";
+          this.sampleId = valid ? def.sampleId : (this.samples[0] ? this.samples[0].id : "");
+          this.uploadedPreview = null;
+          this.uploadStatus = "";
         },
         resetForm() {
           this.form = {
@@ -1198,7 +1380,7 @@
     function loginForm() {
       return {
         name: "",
-        role: "",
+        password: "",
         error: "",
         doLogin() {
           this.error = "";
@@ -1206,11 +1388,12 @@
             this.error = "ユーザー名を入力してください。";
             return;
           }
-          if (this.role !== "owner" && this.role !== "analyst") {
-            this.error = "ロールを選択してください。";
-            return;
+          // 擬似ログイン: アカウント(プリセット)のユーザー名＋デモ用パスワードを照合。
+          // 成功すればロールはアカウントに紐づく値で確定する(画面では選ばない)。
+          const ok = this.$store.session.login(this.name, this.password);
+          if (!ok) {
+            this.error = "ユーザー名またはパスワードが違います。";
           }
-          this.$store.session.login(this.name, this.role);
         },
       };
     }
@@ -1393,47 +1576,83 @@
       };
     }
 
-    // 提出物審査パネル(#42, N3, owner 限定)。datasetPage 配下にネストされ、親スコープの
-    // dataset を参照できる(Alpine はスコープを継承する)。一覧の各カードから提出物を選び、
-    // 【プログラム(コード)＋結果(画像/テキスト)＋レポート】を閲覧 → 承認で共有ストアの
-    // status を approved に遷移させる(submission-status へ即時反映)。生データ並置はしない。
+    // 提出物一覧パネル(#64 で審査インライン面を撤去)。datasetPage 配下にネストされ、
+    // 親スコープの dataset を参照できる(Alpine はスコープを継承する)。一覧の各カードは
+    // 提出物個別ページ(submission ビュー)への遷移ボタンを持つ。詳細閲覧・コメント・承認は
+    // submissionPage() が担う(#64)。ここでは owner ガード判定と一覧描画だけを行う。
     function reviewPanel() {
       return {
-        reviewingId: null, // 審査中の提出物 id(null=非表示)
-        // owner のみ審査可。
+        // owner のみ審査(承認)可。
         //   仮定: catalog の owner 名と突き合わせる厳密一致は擬似のため簡略化し、
         //   「owner ロールならこのデータセットの提出物を審査できる」とする(Issue 許容)。
         //   本番では TRE/サーバーがデータセット所有権で認可する。
         canReview() {
           return this.$store.session.user?.role === "owner";
         },
-        // 審査中の提出物オブジェクト(共有ストアの実体。status 遷移が反映される)。
-        get reviewing() {
-          if (!this.reviewingId || !this.dataset) return null;
-          return this.$store.submissions.find(this.dataset.dataset_id, this.reviewingId);
-        },
-        // 提出物を選んで審査ビューを開く(owner 限定)。
-        openReview(s) {
-          if (!this.canReview()) return;
-          this.reviewingId = s.id;
-        },
-        closeReview() {
-          this.reviewingId = null;
-        },
-        // 承認: 共有ストアの status を submitted -> approved に遷移させる
-        // (一覧の submission-status / data-status に即時反映)。生データ適用はしない。
-        // canReview() 通過済みのため reviewer(= owner 名)は常に存在する。
-        approve() {
-          const s = this.reviewing;
-          if (!s || !this.canReview()) return;
-          this.$store.submissions.approve(
-            this.dataset.dataset_id, s.id, this.$store.session.user?.name);
-        },
         // 一覧描画用(共有ストアから dataset_id で引く)。親 datasetPage.submissions() と
         // 意図的に同実装(本セクションは x-data=reviewPanel で親メソッドを覆うため再掲)。
         submissions() {
           const id = this.dataset && this.dataset.dataset_id;
           return id ? this.$store.submissions.forDataset(id) : [];
+        },
+      };
+    }
+
+    // 提出物 個別ページ(submission ビュー, #64)。session.currentDatasetId /
+    // currentSubmissionId が指す提出物を共有ストア submissions.find() の実体として読み、
+    // 【プログラム(コード)＋結果(画像/テキスト)＋レポート】を閲覧する。承認(owner 限定)で
+    // status を submitted -> approved に遷移し、コメント(全ログインユーザー可)を追記できる。
+    // 実体を読むため、承認/コメントは一覧(submission-status)・カードへ即時反映される。
+    // 対象が未設定/見つからない場合は submission が null になり、テンプレートは安全な
+    // フォールバックを描画する(クラッシュさせない)。
+    function submissionPage() {
+      return {
+        draft: "", // コメント入力中の本文
+        commentError: "",
+        // 表示対象の提出物(共有ストアの実体)。id 未設定/不在なら null。
+        get submission() {
+          const datasetId = this.$store.session.currentDatasetId;
+          const submissionId = this.$store.session.currentSubmissionId;
+          if (!datasetId || !submissionId) return null;
+          return this.$store.submissions.find(datasetId, submissionId);
+        },
+        // owner のみ承認可(reviewPanel と同基準)。
+        canReview() {
+          return this.$store.session.user?.role === "owner";
+        },
+        // コメント一覧(共有ストアの実体配列。未初期化なら空配列)。
+        comments() {
+          const s = this.submission;
+          return (s && Array.isArray(s.comments)) ? s.comments : [];
+        },
+        // 承認: 共有ストアの status を submitted -> approved に遷移させる
+        // (一覧の submission-status / data-status / このページに即時反映)。生データ適用はしない。
+        approve() {
+          const s = this.submission;
+          if (!s || !this.canReview()) return;
+          this.$store.submissions.approve(
+            s.datasetId, s.id, this.$store.session.user?.name);
+        },
+        // コメント追記(要ログイン)。owner / analyst 双方が可能。空文字は弾く。
+        // 著者はログイン中ユーザー名、時刻はストア側で ISO8601 を付ける。
+        addComment() {
+          this.commentError = "";
+          if (!this.$store.session.isAuthed()) {
+            this.commentError = "コメントにはログインが必要です。";
+            return;
+          }
+          const s = this.submission;
+          if (!s) return;
+          const text = (this.draft || "").trim();
+          if (!text) {
+            this.commentError = "コメントを入力してください。";
+            return;
+          }
+          this.$store.submissions.addComment(s.datasetId, s.id, {
+            author: this.$store.session.user?.name || "anonymous",
+            text,
+          });
+          this.draft = "";
         },
       };
     }
@@ -1579,6 +1798,14 @@
         submittedAt: "2026-05-08T14:05:00.000Z",
         reviewedBy: "保田 オーナー",
         reviewedAt: "2026-05-09T10:20:00.000Z",
+        // デモ用の対話コメント(#64)。提出物個別ページのコメント面が初回から空でないようにする。
+        comments: [
+          {
+            author: "保田 オーナー",
+            text: "用量反応の方向性は妥当でした。TRE 内で生データに適用して承認します。",
+            at: "2026-05-09T10:18:00.000Z",
+          },
+        ],
       },
       {
         id: "preset-3",
@@ -1723,10 +1950,12 @@
           this.resultText = "";
           this.report = "";
         },
-        // デモ用ワンクリック提出(#52)。内蔵サンプル(DEMO_SUBMISSIONS)を巡回し、
-        // 手動提出と同じ submissions.add() 経路で 1 件保存する。要ログイン。
-        // analyst はクリック時のログインユーザー名。status は store が "submitted" を補完。
-        // プログラムは実行されず、表示・保管のみ(手動提出と同じ)。
+        // デモ用サンプルでフォームを記入する(#65。#62 の登録フォームと同思想)。
+        // ファイルを用意せず、内蔵サンプル(プログラム＋結果テキスト＋所見)を
+        // フォーム状態(programText/resultText/report 等)へ流し込むだけ。提出はしない。
+        // ユーザーは記入後に「プログラム＋結果を提出する」を押して送信する。
+        // 提出と同じく要ログイン(未ログインではボタン無効)。クリックごとにサンプルを巡回。
+        // プログラムは実行されず、表示・保管のみ(手動記入と同じ)。
         submitDemo() {
           this.error = "";
           this.success = "";
@@ -1736,17 +1965,18 @@
           }
           const def = DEMO_SUBMISSIONS[this.demoSeq % DEMO_SUBMISSIONS.length];
           this.demoSeq += 1;
-          const datasetId = this.$store.session.currentDatasetId;
-          // サンプル定義は共有しているため、結果配列は浅いコピーで渡す(参照共有を避ける)。
-          const saved = this.$store.submissions.add(datasetId, {
-            program: { name: def.program.name, text: def.program.text },
-            results: def.results.map((r) => ({ ...r })),
-            report: def.report,
-            analyst: this.$store.session.user?.name || "analyst",
-          });
-          this.success =
-            "デモ用サンプルを提出しました(" + saved.id + ": " +
-            def.program.name + ")。下の「紐づく提出物」に追加されました。";
+          // プログラム: 名前とテキストを設定し、バイト数はテキスト長から算出する。
+          this.programName = def.program.name;
+          this.programText = def.program.text;
+          this.programBytes = new TextEncoder().encode(def.program.text).length;
+          // 結果: 現状のサンプルはテキスト結果。テキスト結果を resultText へ流し込み、
+          // 画像結果があれば resultImage に設定する(submit() のバリデーションを通すため)。
+          const textResult = def.results.find((r) => r.type === "text");
+          const imageResult = def.results.find((r) => r.type === "image");
+          this.resultText = textResult ? textResult.content : "";
+          this.resultImage = imageResult ? { ...imageResult } : null;
+          // レポート/メモを設定。
+          this.report = def.report;
         },
       };
     }

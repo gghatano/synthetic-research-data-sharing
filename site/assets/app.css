@@ -204,9 +204,14 @@ button.ghost {
 .login-presets { margin: 16px 0; }
 .login-presets .chip { display: inline-flex; align-items: center; gap: 6px; margin: 0 8px 8px 0; }
 .login-presets .chip small { opacity: .8; }
+.login-hint { margin: 0 0 16px; display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; }
+.login-hint-item { white-space: nowrap; }
+.login-hint code { font-size: .85rem; }
+.login-hint small { opacity: .7; }
 .login-form { display: flex; flex-direction: column; gap: 16px; margin-top: 8px; }
 .field { display: block; }
-.login-form input[type="text"] {
+.login-form input[type="text"],
+.login-form input[type="password"] {
   width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px;
   font-size: .95rem; background: #fcfdff;
 }
@@ -354,6 +359,24 @@ button.ghost {
   border-radius: var(--radius); background: #f7f9fd;
 }
 .review-panel > h3 { margin-top: 0; }
+.review-panel > h2 { margin-top: 0; }
+/* 提出物 個別ページ(審査・コメント, #64) */
+.submission-view { margin-top: 8px; }
+.submission-view .dataset-back { margin-bottom: 12px; }
+/* コメント面(#64) */
+.review-comments { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); }
+.review-comments h4 { margin: 0 0 8px; }
+.comment-list { margin: 0 0 14px; display: flex; flex-direction: column; gap: 8px; }
+.comment-item { padding: 10px 12px; background: #fff; }
+.comment-head {
+  margin: 0 0 4px; display: flex; gap: 10px; align-items: baseline;
+  flex-wrap: wrap; font-size: .85rem;
+}
+.comment-author { color: var(--brand); }
+.comment-when { color: var(--muted); font-size: .78rem; }
+.comment-text { margin: 0; white-space: pre-wrap; font-size: .92rem; }
+.comment-form { margin-top: 6px; }
+.comment-form textarea { width: 100%; box-sizing: border-box; }
 .review-report {
   margin: 10px 0; padding: 12px 14px; border-left: 3px solid var(--brand);
   background: #fff; border-radius: 0 8px 8px 0;

@@ -80,9 +80,13 @@ def test_dataset_submission_placeholder_empty(page: Page, base_url: str) -> None
     提出物が初期投入されるため、空状態は新規登録した user データセットで確認する。
     """
     open_register(page, base_url)
-    # デモ用データを 1 件登録すると、その個別ページへ自動遷移する(#55)。
+    # デモ用ボタンはフォームを記入するだけ(#62)。登録ボタンで登録し、登録済み一覧の
+    # 「開く」でその個別ページへ遷移する(自動遷移はしない)。
     # user-<n> データセットはプリセット対象外なので提出物はまだ無い。
     page.get_by_test_id("reg-demo-register").click()
+    page.get_by_test_id("reg-submit").click()
+    expect(page.get_by_test_id("reg-success")).to_be_visible()
+    page.get_by_test_id("reg-open").first.click()
     page.wait_for_selector("[data-testid='dataset-view']", state="visible")
 
     submissions = page.get_by_test_id("dataset-submissions")
