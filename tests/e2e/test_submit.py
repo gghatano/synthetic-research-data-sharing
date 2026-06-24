@@ -153,43 +153,63 @@ def test_uploaded_program_is_not_executed_xss_safe(page: Page, base_url: str) ->
     assert page.evaluate("() => window.__pwned") is None
 
 
-def test_submit_demo_sample(page: Page, base_url: str) -> None:
-    """デモ用サンプル提出ボタンで、ファイル準備なしに提出物が一覧に追加される(#52)。"""
+def test_submit_demo_fills_form_without_submitting(page: Page, base_url: str) -> None:
+    """デモボタンは提出フォームを記入するだけ。提出はしない(#65。#62 と同思想)。"""
     open_dataset_as(page, base_url, name=ANALYST[0], password=ANALYST[1])
 
-    # 提出前、ユーザー提出分(sub-<n>)はゼロ(プリセット #53 は別 id 体系で混ざらない)。
+    # 記入前、ユーザー提出分(sub-<n>)はゼロ(プリセット #53 は別 id 体系で混ざらない)。
     user_cards = page.locator("[data-testid='submission-card'][data-submission-id^='sub-']")
     assert user_cards.count() == 0
 
+    # クリック → 提出フォームが架空デモデータで記入される(提出はしない)。
     page.get_by_test_id("submit-demo").click()
+
+    # プログラム状態が埋まり、プレビュー(program-status / program-preview)が表示される。
+    expect(page.get_by_test_id("program-status")).to_be_visible()
+    preview = page.get_by_test_id("program-preview")
+    expect(preview).to_be_visible()
+    expect(preview.locator("code")).to_contain_text("KMeans")
+    # 結果テキスト・レポートが非空で記入されている。
+    expect(page.get_by_test_id("submit-result-text")).not_to_have_value("")
+    expect(page.get_by_test_id("submit-report")).not_to_have_value("")
+    # 成功メッセージは出ない(まだ提出していない)。
+    expect(page.get_by_test_id("submit-success")).to_be_hidden()
+    # まだ提出は発生していない(ユーザー提出分は空のまま)。
+    expect(user_cards).to_have_count(0)
+
+    # ユーザーが submit-to-dataset を押して初めて提出される。
+    page.get_by_test_id("submit-to-dataset").click()
     expect(page.get_by_test_id("submit-success")).to_be_visible()
 
     card = user_cards.last
     expect(card).to_be_visible()
-    # 内蔵サンプル(1 件目)が手動提出と同形で表示される。
+    # 記入した内蔵サンプル(1 件目)が手動提出と同形で表示される。
     expect(card.get_by_test_id("submission-program")).to_have_text("clustering.py")
     expect(card.get_by_test_id("submission-status")).to_have_text("submitted")
     expect(card.get_by_test_id("submission-results-count")).to_contain_text("結果 1 件")
 
 
 def test_submit_demo_cycles_samples(page: Page, base_url: str) -> None:
-    """連続クリックで内蔵サンプルを巡回提出する(#52)。"""
+    """デモボタンを連続クリックすると別々のサンプルでフォームを記入し直す(巡回, #65)。"""
     open_dataset_as(page, base_url, name=ANALYST[0], password=ANALYST[1])
 
     page.get_by_test_id("submit-demo").click()
-    page.get_by_test_id("submit-demo").click()
+    first = page.get_by_test_id("program-status").inner_text()
+    assert "clustering.py" in first  # 1 件目で記入。
 
-    # プリセット(#53)と区別するため、ユーザー提出分(sub-<n>)のみを数える。
+    # 2 回目のクリック → 別サンプルでフォームが上書きされる(提出はしない)。
+    page.get_by_test_id("submit-demo").click()
+    second = page.get_by_test_id("program-status").inner_text()
+    assert "dose_response.py" in second  # 2 件目で記入し直す。
+    assert first != second
+
+    # 巡回中は一度も提出されない(ユーザー提出分は空のまま)。
     cards = page.locator("[data-testid='submission-card'][data-submission-id^='sub-']")
-    expect(cards).to_have_count(2)
-    # 巡回: 2 クリックで別々のサンプル名が並ぶ(最新が先頭表示でなくても両方存在する)。
-    names = cards.locator("[data-testid='submission-program']").all_inner_texts()
-    assert "clustering.py" in names
-    assert "dose_response.py" in names
+    expect(cards).to_have_count(0)
 
 
 def test_submit_demo_requires_login(page: Page, base_url: str) -> None:
-    """未ログインではデモ提出ボタンも無効(手動提出と同じ認証ガード)(#52)。"""
+    """未ログインではデモ記入ボタンも無効(手動提出と同じ認証ガード)(#65)。"""
     goto_app(page, base_url)
     page.get_by_test_id("login-to-catalog").click()
     page.wait_for_selector("[data-testid='explore-view']", state="visible")
