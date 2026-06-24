@@ -391,21 +391,24 @@
         (Trusted Research Environment)内で生データから合成データを生成・検証します。
         <strong>ここで扱うデータはすべて架空</strong>です(実患者データを入力しないでください)。</p>
 
-      <!-- ---- デモ用ワンクリック登録(#55) ---- -->
+      <!-- ---- デモ用フォーム記入(#55/#62) ---- -->
       <!--
-        手入力なしで「登録 → カタログ反映 → 個別ページ」を素早く見せるための
-        デモ専用ショートカット。owner 限定の register ビュー内にあるので追加ガードは不要。
-        通常の手入力フォームと同じ catalog.register() を通すため、登録結果は手動登録と同一。
+        手入力なしでフォームを素早く埋めるためのデモ専用ショートカット。
+        owner 限定の register ビュー内にあるので追加ガードは不要。
+        #62 で挙動を変更: 登録・遷移はせず、下の手入力フォームを架空データで埋めるだけ。
+        ダミーデータ指定(同梱サンプル)もセットして submit-ready にするので、
+        ユーザーが「カタログに登録する」を押せば通常の手入力と同じ catalog.register() を通る。
         架空データである旨を添える(本番では使わない便宜機能)。
       -->
       <section class="reg-demo" data-testid="reg-demo">
         <div class="reg-demo-text">
           <strong>デモを素早く試す</strong>
-          <p class="frag-note">手入力なしで架空のデモ用データセットをカタログに登録します
-            (便宜機能・架空データ)。登録後は新規データセットの個別ページを開きます。</p>
+          <p class="frag-note">手入力なしで架空のデモ用データセットの内容をフォームに記入します
+            (便宜機能・架空データ)。<strong>記入のみで登録はしません</strong>。
+            内容を確認したら下の「カタログに登録する」で登録してください。</p>
         </div>
         <button class="primary" type="button" data-testid="reg-demo-register"
-                @click="registerDemo()">デモ用データを登録</button>
+                @click="registerDemo()">デモ用データでフォームを記入</button>
       </section>
 
       <form class="register-form" @submit.prevent="submit()">
@@ -993,59 +996,34 @@
         uploadStatus: "",
         error: "",
         success: "",
-        demoSeq: 0,           // デモ用データセットの巡回インデックス(#55)
-        // デモ用ワンクリック登録(#55)で使う架空データセット定義。
-        // catalog.json の datasets[] と同形(title/description/owner/domain/tags/
-        // usage_examples/n_patients/dummy_preview)。owner は登録時に補完する。
-        // 分析フラグメント(synthetic/raw)は持たないため、個別ページでは
-        // メタデータ+ダミーのみ表示され、合成データ DL は出ない(hasSyntheticDownload=false)。
-        // 複数定義し、クリックごとに次を登録する(巡回)。
+        demoSeq: 0,           // デモ用データセット定義の巡回インデックス(#55/#62)
+        // デモ用「フォーム記入」(#62)で使う架空データセット定義。
+        // 登録はしない: これらの値で手入力フォームを埋め、ユーザーが reg-submit で確定する。
+        // sampleId は samples[] の有効な id を指す(これでダミーデータ指定が submit-ready になる)。
+        // tags/usage は手入力フォームと同じ raw 文字列(tagsRaw=カンマ区切り, usageRaw=改行区切り)。
+        // 複数定義し、クリックごとに次の定義でフォームを埋める(巡回)。
         demoDatasets: [
           {
             title: "心不全 再入院リスク コホート(デモ)",
             description: "退院後 30 日以内の再入院に関連する指標を集めた架空コホート。" +
               "デモ用の合成/ダミーデータで、実患者データは一切含みません。",
             domain: "cardiology",
-            tags: ["heart-failure", "readmission", "longitudinal"],
-            usage_examples: [
-              "再入院リスクのロジスティック回帰でリスク因子を同定する",
+            tagsRaw: "heart-failure, readmission, longitudinal",
+            usageRaw: "再入院リスクのロジスティック回帰でリスク因子を同定する\n" +
               "退院後フォローアップ間隔と再入院率の関連を可視化する",
-            ],
             n_patients: 180,
-            dummy_preview: {
-              patients: [
-                { patient_id: "HF-001", age: 72, risk_group: "high", enrollment_date: "2023-01-12" },
-                { patient_id: "HF-002", age: 64, risk_group: "moderate", enrollment_date: "2023-02-03" },
-                { patient_id: "HF-003", age: 81, risk_group: "high", enrollment_date: "2023-02-20" },
-              ],
-              medications: [
-                { patient_id: "HF-001", datetime: "2023-01-13T08:30", drug: "furosemide", dose_mg: 40 },
-                { patient_id: "HF-002", datetime: "2023-02-04T09:15", drug: "carvedilol", dose_mg: 12 },
-              ],
-            },
+            sampleId: "renal-egfr",
           },
           {
             title: "2 型糖尿病 HbA1c 推移(デモ)",
             description: "血糖管理マーカー(HbA1c)の経時推移を含む架空データセット。" +
               "デモ用のダミーデータのみで、生データは共有されません。",
             domain: "endocrinology",
-            tags: ["diabetes", "hba1c", "marker"],
-            usage_examples: [
-              "HbA1c 軌跡のクラスタリングで管理パターンを分類する",
+            tagsRaw: "diabetes, hba1c, marker",
+            usageRaw: "HbA1c 軌跡のクラスタリングで管理パターンを分類する\n" +
               "投薬変更前後の HbA1c 変化を比較する",
-            ],
             n_patients: 140,
-            dummy_preview: {
-              patients: [
-                { patient_id: "DM-01", age: 55, risk_group: "moderate", enrollment_date: "2022-09-01" },
-                { patient_id: "DM-02", age: 48, risk_group: "low", enrollment_date: "2022-10-11" },
-              ],
-              psa_measurements: [
-                { patient_id: "DM-01", date: "2022-09-05", psa: 7.2 },
-                { patient_id: "DM-01", date: "2022-12-05", psa: 6.8 },
-                { patient_id: "DM-02", date: "2022-10-15", psa: 6.1 },
-              ],
-            },
+            sampleId: "generic-marker",
           },
         ],
         // 事前同梱サンプル(ブラウザ内蔵の小さなダミー。生成ではなく固定値)。
@@ -1176,21 +1154,31 @@
           this.success = "登録しました(" + id + ")。データカタログに反映されました。";
           this.resetForm();
         },
-        // デモ用ワンクリック登録(#55)。手入力フォームと同じ catalog.register() を通し、
-        // owner だけを登録時に補完する(他フィールドは demoDatasets 定義をそのまま使用)。
-        // クリックごとに demoDatasets を巡回し、登録直後に新規データセットの個別ページを開く。
+        // デモ用「フォーム記入」(#62)。登録も遷移もしない。手入力フォームを
+        // demoDatasets 定義で埋め、ダミーデータ指定(source=sample + 有効な sampleId)も
+        // セットして submit-ready にする。ユーザーが reg-submit を押して初めて登録される。
+        // クリックごとに次の定義へ巡回する。catalog.register()/openDataset() は呼ばない。
         registerDemo() {
           this.error = "";
           this.success = "";
           const def = this.demoDatasets[this.demoSeq % this.demoDatasets.length];
           this.demoSeq += 1;
-          const entry = {
-            ...def,
-            owner: this.$store.session.user?.name || "owner",
+          // メタデータ各フィールドを定義から記入(手入力と同じ form/raw 文字列に流し込む)。
+          this.form = {
+            title: def.title,
+            description: def.description,
+            domain: def.domain,
+            n_patients: def.n_patients,
+            tagsRaw: def.tagsRaw,
+            usageRaw: def.usageRaw,
           };
-          const id = this.$store.catalog.register(entry);
-          // 登録後は新規データセットの個別ページへ遷移して即座に確認できるようにする。
-          this.$store.session.openDataset(id);
+          // ダミーデータ指定: 同梱サンプルを選択した状態にして submit() のバリデーションを通す。
+          // 定義の sampleId が samples[] に無い場合は先頭サンプルにフォールバックする。
+          const valid = this.samples.some((s) => s.id === def.sampleId);
+          this.source = "sample";
+          this.sampleId = valid ? def.sampleId : (this.samples[0] ? this.samples[0].id : "");
+          this.uploadedPreview = null;
+          this.uploadStatus = "";
         },
         resetForm() {
           this.form = {
