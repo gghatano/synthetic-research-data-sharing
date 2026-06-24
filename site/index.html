@@ -802,26 +802,27 @@
               </div>
 
               <!--
-                デモ用ワンクリック提出(#55 の登録ボタンと同思想・便宜機能)。
+                デモ用サンプルでフォームを記入(#65。#62 の登録フォームと同思想・便宜機能)。
                 ファイルを用意せず、内蔵のサンプル(プログラム＋結果テキスト＋所見)を
-                そのまま submissions.add() へ流し、提出→審査フローを素早く試せる。
-                提出は要ログインなので手動提出と同じ認証ガード(未ログインで無効化)。
-                サンプルは複数あり、クリックごとに次を巡回提出する。
-                プログラムは実行されず、表示・保管のみ(手動提出と同じ)。
+                フォーム状態へ流し込むだけ。提出はせず、ユーザーが上の提出ボタンで送信する。
+                記入は要ログインなので手動提出と同じ認証ガード(未ログインで無効化)。
+                サンプルは複数あり、クリックごとに次のサンプルで記入し直す。
+                プログラムは実行されず、表示・保管のみ(手動記入と同じ)。
               -->
               <div class="reg-demo submit-demo" data-testid="submit-demo-box">
                 <div class="reg-demo-text">
                   <strong>デモを素早く試す</strong>
                   <p class="frag-note">ファイル準備なしで、内蔵の架空サンプル
-                    (分析プログラム＋結果＋所見)をそのまま提出します(便宜機能)。
-                    クリックごとに次のサンプルを提出します。提出物は実行されず表示のみ。</p>
+                    (分析プログラム＋結果＋所見)を上のフォームに記入します(便宜機能)。
+                    記入後、<strong>上の「プログラム＋結果を提出する」</strong>で送信してください。
+                    クリックごとに次のサンプルで記入し直します。提出物は実行されず表示のみ。</p>
                 </div>
                 <button class="ghost" type="button" data-testid="submit-demo"
                         @click="submitDemo()"
                         :disabled="!$store.session.isAuthed()"
                         :title="!$store.session.isAuthed()
-                          ? 'ログインすると提出できます' : ''">
-                  デモ用のサンプルを提出</button>
+                          ? 'ログインするとフォームに記入できます' : ''">
+                  デモ用サンプルでフォームを記入</button>
               </div>
             </div>
             </template>
@@ -1807,10 +1808,12 @@
           this.resultText = "";
           this.report = "";
         },
-        // デモ用ワンクリック提出(#52)。内蔵サンプル(DEMO_SUBMISSIONS)を巡回し、
-        // 手動提出と同じ submissions.add() 経路で 1 件保存する。要ログイン。
-        // analyst はクリック時のログインユーザー名。status は store が "submitted" を補完。
-        // プログラムは実行されず、表示・保管のみ(手動提出と同じ)。
+        // デモ用サンプルでフォームを記入する(#65。#62 の登録フォームと同思想)。
+        // ファイルを用意せず、内蔵サンプル(プログラム＋結果テキスト＋所見)を
+        // フォーム状態(programText/resultText/report 等)へ流し込むだけ。提出はしない。
+        // ユーザーは記入後に「プログラム＋結果を提出する」を押して送信する。
+        // 提出と同じく要ログイン(未ログインではボタン無効)。クリックごとにサンプルを巡回。
+        // プログラムは実行されず、表示・保管のみ(手動記入と同じ)。
         submitDemo() {
           this.error = "";
           this.success = "";
@@ -1820,17 +1823,18 @@
           }
           const def = DEMO_SUBMISSIONS[this.demoSeq % DEMO_SUBMISSIONS.length];
           this.demoSeq += 1;
-          const datasetId = this.$store.session.currentDatasetId;
-          // サンプル定義は共有しているため、結果配列は浅いコピーで渡す(参照共有を避ける)。
-          const saved = this.$store.submissions.add(datasetId, {
-            program: { name: def.program.name, text: def.program.text },
-            results: def.results.map((r) => ({ ...r })),
-            report: def.report,
-            analyst: this.$store.session.user?.name || "analyst",
-          });
-          this.success =
-            "デモ用サンプルを提出しました(" + saved.id + ": " +
-            def.program.name + ")。下の「紐づく提出物」に追加されました。";
+          // プログラム: 名前とテキストを設定し、バイト数はテキスト長から算出する。
+          this.programName = def.program.name;
+          this.programText = def.program.text;
+          this.programBytes = new TextEncoder().encode(def.program.text).length;
+          // 結果: 現状のサンプルはテキスト結果。テキスト結果を resultText へ流し込み、
+          // 画像結果があれば resultImage に設定する(submit() のバリデーションを通すため)。
+          const textResult = def.results.find((r) => r.type === "text");
+          const imageResult = def.results.find((r) => r.type === "image");
+          this.resultText = textResult ? textResult.content : "";
+          this.resultImage = imageResult ? { ...imageResult } : null;
+          // レポート/メモを設定。
+          this.report = def.report;
         },
       };
     }

@@ -179,9 +179,12 @@ def test_preset_does_not_collide_with_user_submission_ids(page: Page, base_url: 
     """プリセット(preset-<n>)が seq を進めず、ユーザー提出は sub-<n> でユニーク採番(#53)。"""
     open_dataset_as(page, base_url, name=ANALYST[0], password=ANALYST[1])
 
-    # デモ提出を 2 回 → 別々の sub-<n> が付き、プリセットと混ざらない。
+    # デモ提出は「フォーム記入のみ」(#65)。記入→提出 を 2 回行うと、別々の sub-<n> が
+    # 付き、プリセットと混ざらない。
     page.get_by_test_id("submit-demo").click()
+    page.get_by_test_id("submit-to-dataset").click()
     page.get_by_test_id("submit-demo").click()
+    page.get_by_test_id("submit-to-dataset").click()
     user_cards = page.locator("[data-testid='submission-card'][data-submission-id^='sub-']")
     expect(user_cards).to_have_count(2)
     ids = user_cards.evaluate_all("els => els.map(e => e.getAttribute('data-submission-id'))")
