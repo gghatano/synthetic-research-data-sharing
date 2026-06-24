@@ -404,6 +404,13 @@ button.ghost {
   margin: 0; padding: 10px 12px; background: #fff; border: 1px solid var(--line);
   border-radius: 8px; overflow-x: auto; font-size: .85rem; white-space: pre-wrap;
 }
+/* 結果のグラフ可視化(#81)。canvas は高さ固定の枠内で responsive 描画する。 */
+.review-result-chart {
+  margin: 10px 0 0; padding: 12px; background: #fff;
+  border: 1px solid var(--line); border-radius: 8px;
+}
+.review-result-chart canvas { width: 100% !important; height: 240px !important; }
+.review-result-chart figcaption { margin-top: 6px; text-align: center; }
 
 /* 提出物の登録ブロック(分析ワークベンチ内, #25) */
 .submit-block {

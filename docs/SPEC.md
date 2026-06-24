@@ -576,6 +576,24 @@ Submission = {
 - `currentSubmissionId` が未設定／不在のときは安全なフォールバック（`submission-not-found`）を
   描画し、クラッシュさせない。**戻る**導線（`submission-back`）でデータセット個別ページへ復帰する。
 
+### 結果のグラフ可視化（#81）
+
+審査者が結果の妥当性を素早く把握できるよう、結果に**グラフ可視化**を加える。
+
+- 各結果（`results[]` の要素）は任意の **`chart` spec**（宣言的データ）を持てる。形は
+  `{ type, title, labels, datasets:[{label,data}], xLabel?, yLabel? }`。`chart` を持つ結果だけ
+  `<canvas>`（`review-result-chart` / `review-result-canvas`）を描画する。
+- 描画は **Chart.js**（CDN, `chart.js@4.4.1`）で行う。#70 でライブシェルから撤去したが、本用途
+  （審査ページのグラフ）で**再導入**する（`<head>` に defer で読込）。`submissionPage().renderChart()`
+  が canvas に対し既存インスタンスを破棄してから描画し、描画後に `data-chart-ready="true"` を立てる。
+- 提出物を切替えたとき確実に再描画されるよう、結果の `x-for` の `:key` に `submission.id` を含め、
+  DOM を作り直して `x-init`（描画）を再実行させる。
+- **構造化数値のみ**で描く（`x-html`/`innerHTML` 不使用 = XSS 安全）。`chart` データは表示中の
+  テキスト結果の数値と整合させる（**誠実な可視化**。曲線は係数から事前計算した点列を spec に格納）。
+- デモ／プリセット提出物（§7.8 #52/#53）の結果に `chart` を付与する（クラスタ別 responder 比率＝棒、
+  用量反応曲線＝折れ線、リスク群別 生存中央値＝棒）。**ユーザーがアップロードした自由記述の
+  text/image 結果はパースしてグラフ化しない**（`chart` を持たない結果は従来どおり text/image 表示）。
+
 ### コメント（対話, #64）
 
 - 提出物個別ページに**コメント一覧**（`comment-list` / 各 `comment-item`）と**追記フォーム**
