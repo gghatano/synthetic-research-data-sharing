@@ -7,6 +7,9 @@
   <link rel="stylesheet" href="assets/app.css" />
   <!-- htmx: フラグメント(静的HTML / 本番ではFastAPI応答)を hx-get で読み込む -->
   <script defer src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.3/dist/htmx.min.js"></script>
+  <!-- Chart.js: 審査ページ(submission ビュー)で提出物の結果をグラフ描画する(#81)。
+       defer + Alpine より前に置き、Alpine の x-init が走る時点で window.Chart を定義済みにする。 -->
+  <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <!-- Alpine.js: ログイン状態(共有ストア)と 3ロールのワークフロー状態機械を管理 -->
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
 
@@ -993,7 +996,10 @@
         <!-- 結果(画像/テキスト)。画像は提出時 dataURL、テキストは x-text。 -->
         <div class="review-results" data-testid="review-results">
           <h4>提出された結果</h4>
-          <template x-for="(r, ri) in (submission.results || [])" :key="ri">
+          <!-- :key に submission.id を含め、提出物を切替えたとき DOM を作り直して
+               canvas の x-init(グラフ描画)を確実に再実行させる(#81)。 -->
+          <template x-for="(r, ri) in (submission.results || [])"
+                    :key="submission.id + ':' + ri">
             <div class="review-result" data-testid="review-result"
                  :data-result-type="r.type">
               <template x-if="r.type === 'image'">
@@ -1007,6 +1013,16 @@
                   <h5 x-text="r.name"></h5>
                   <pre class="result-text" x-text="r.content"></pre>
                 </div>
+              </template>
+              <!-- 結果のグラフ可視化(#81)。chart spec を持つ結果のみ canvas を描画。
+                   構造化数値のみで描く(x-html 不使用 = XSS 安全)。 -->
+              <template x-if="r.chart">
+                <figure class="review-result-chart" data-testid="review-result-chart"
+                        :data-chart-type="r.chart.type">
+                  <canvas data-testid="review-result-canvas"
+                          x-init="renderChart($el, r.chart)"></canvas>
+                  <figcaption class="reg-filestatus" x-text="r.chart.title"></figcaption>
+                </figure>
               </template>
             </div>
           </template>
@@ -1654,6 +1670,53 @@
           });
           this.draft = "";
         },
+        // 結果の chart spec(宣言的データ)を Chart.js で canvas に描画する(#81)。
+        // 提出物切替時は :key により canvas が作り直され x-init が再実行される。
+        // 同一 canvas に既存インスタンスが残っていれば破棄してから描く(再描画安全)。
+        renderChart(canvas, spec) {
+          if (!canvas || !spec || !window.Chart) return;
+          this.$nextTick(() => {
+            const existing = window.Chart.getChart(canvas);
+            if (existing) existing.destroy();
+            const palette = ["#2563eb", "#0d9488", "#db2777", "#f59e0b"];
+            const isLine = spec.type === "line";
+            new window.Chart(canvas, {
+              type: spec.type,
+              data: {
+                labels: spec.labels || [],
+                datasets: (spec.datasets || []).map((d, i) => ({
+                  label: d.label,
+                  data: d.data,
+                  backgroundColor: isLine
+                    ? "rgba(37, 99, 235, 0.12)"
+                    : palette[i % palette.length],
+                  borderColor: palette[i % palette.length],
+                  borderWidth: 2,
+                  fill: isLine,
+                  tension: 0.3,
+                  pointRadius: 3,
+                })),
+              },
+              options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                  legend: { display: (spec.datasets || []).length > 1 },
+                  title: { display: !!spec.title, text: spec.title },
+                },
+                scales: {
+                  x: { title: { display: !!spec.xLabel, text: spec.xLabel } },
+                  y: {
+                    beginAtZero: true,
+                    title: { display: !!spec.yLabel, text: spec.yLabel },
+                  },
+                },
+              },
+            });
+            // e2e が描画完了を待てるよう、描画後にフラグ属性を立てる。
+            canvas.setAttribute("data-chart-ready", "true");
+          });
+        },
       };
     }
 
@@ -1695,6 +1758,15 @@
               "2        45   0.78\n" +
               "\n" +
               "クラスタ 2 で responder 比率が最も高い(0.78)。",
+            // 審査ページのグラフ可視化(#81)。表示中の数値と整合する宣言的 spec。
+            chart: {
+              type: "bar",
+              title: "クラスタ別 responder 比率",
+              xLabel: "クラスタ",
+              yLabel: "responder 比率",
+              labels: ["クラスタ 0", "クラスタ 1", "クラスタ 2"],
+              datasets: [{ label: "responder 比率", data: [0.41, 0.63, 0.78] }],
+            },
           },
         ],
         report:
@@ -1726,6 +1798,21 @@
               "age        -0.01   0.01       0.21\n" +
               "\n" +
               "log_dose に有意な正の関連(p<0.001)。",
+            // 審査ページのグラフ可視化(#81)。当てはめた回帰
+            // P(responder)=sigmoid(-2.10 + 0.58*log1p(dose)) を事前計算した点列。
+            chart: {
+              type: "line",
+              title: "用量反応曲線(ロジスティック回帰の当てはめ)",
+              xLabel: "用量 (mg)",
+              yLabel: "responder 確率",
+              labels: ["0", "10", "25", "50", "100", "150", "200"],
+              datasets: [
+                {
+                  label: "P(responder)",
+                  data: [0.11, 0.33, 0.45, 0.55, 0.64, 0.69, 0.73],
+                },
+              ],
+            },
           },
         ],
         report:
@@ -1757,6 +1844,15 @@
               "high        185\n" +
               "\n" +
               "high 群で生存中央値が明らかに短い(185 日)。",
+            // 審査ページのグラフ可視化(#81)。表示中の生存中央値と整合する宣言的 spec。
+            chart: {
+              type: "bar",
+              title: "リスク群別 生存中央値(日)",
+              xLabel: "リスク群",
+              yLabel: "生存中央値 (日)",
+              labels: ["low", "moderate", "high"],
+              datasets: [{ label: "生存中央値 (日)", data: [420, 310, 185] }],
+            },
           },
         ],
         report:

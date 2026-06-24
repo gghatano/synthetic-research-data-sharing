@@ -18,7 +18,8 @@ def goto_app(page: Page, base_url: str) -> None:
     page.set_default_timeout(DEFAULT_TIMEOUT_MS)
     page.goto(base_url + "/")
     # CDN ライブラリ(htmx は defer, Alpine も defer)が読み込まれるまで待つ。
-    # Chart.js はライブシェルでは読み込まない(#70)。フラグメント内でのみ使用。
+    # Chart.js(#81 で審査ページのグラフ描画用に再導入)は描画する画面でのみ必要なので、
+    # ここでは gate しない(描画完了は各テストが data-chart-ready 属性で待つ)。
     page.wait_for_function("() => !!window.htmx && !!window.Alpine")
     # 擬似ログイン画面が x-cloak 解除されて可視化されるまで待つ。
     page.wait_for_selector("[data-testid='login-view']", state="visible")
