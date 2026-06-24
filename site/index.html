@@ -369,7 +369,7 @@
     <!--
       合成データ+メタデータの新規登録(擬似)。owner 専用。
       確定仮定: ブラウザで合成データは生成しない。メタデータ + (同梱サンプル選択 or
-      JSON アップロード)した「ダミーデータプレビュー」を共有ストアに追加するのみ。
+      CSV アップロード)した「ダミーデータプレビュー」を共有ストアに追加するのみ。
       本番では TRE 内で合成データを生成・検証し、その結果をカタログに載せる。
       登録分は in-memory(ハードリロードでリセット)。すべて架空データ。
     -->
@@ -386,7 +386,7 @@
       <!-- 擬似モックである旨・架空データである旨の注記(SPEC と整合) -->
       <p class="register-disclaimer" data-testid="register-disclaimer">
         ⚠️ これは<strong>静的モック</strong>です。ブラウザ上で合成データ生成は行いません。
-        登録は<strong>メタデータ＋（同梱サンプル選択 or JSON アップロードした）ダミーデータ</strong>を
+        登録は<strong>メタデータ＋（同梱サンプル選択 or CSV アップロードした）ダミーデータ</strong>を
         メモリ上のカタログに追加するだけで、ハードリロードで消えます。本番では TRE
         (Trusted Research Environment)内で生データから合成データを生成・検証します。
         <strong>ここで扱うデータはすべて架空</strong>です(実患者データを入力しないでください)。</p>
@@ -454,7 +454,7 @@
         <fieldset class="field reg-source">
           <legend class="login-label">ダミーデータの指定 <span class="req">*</span></legend>
           <p class="frag-note">ブラウザで合成データは生成しません。
-            <strong>同梱サンプルから選ぶ</strong>か、<strong>JSON をアップロード</strong>してください。</p>
+            <strong>同梱サンプルから選ぶ</strong>か、<strong>CSV をアップロード</strong>してください。</p>
 
           <label class="radio">
             <input type="radio" name="reg-source" value="sample" x-model="source"
@@ -473,14 +473,15 @@
           <label class="radio">
             <input type="radio" name="reg-source" value="upload" x-model="source"
                    data-testid="reg-source-upload" />
-            <span>JSON ファイルをアップロード</span>
+            <span>CSV ファイルをアップロード</span>
           </label>
           <div class="reg-source-body" x-show="source === 'upload'" x-cloak>
-            <input type="file" accept="application/json,.json"
+            <input type="file" accept="text/csv,.csv"
                    data-testid="reg-file" @change="onFile($event)" />
-            <p class="frag-note">形式: <code>{ "patients": [...], "psa_measurements": [...],
-              "medications": [...] }</code> のいずれかのテーブルを含む JSON。
-              先頭数行をダミープレビューに使います。</p>
+            <p class="frag-note">形式: 先頭行がヘッダ(列名)の <strong>CSV ファイル</strong>。
+              1 ファイル = 1 テーブル(<code>patients</code> / <code>psa_measurements</code> /
+              <code>medications</code> のいずれか)。ヘッダの列名でテーブルを自動判定し、
+              先頭数行をダミープレビューに使います(合成データの CSV ダウンロードと同形)。</p>
             <p class="reg-filestatus" data-testid="reg-file-status"
                x-show="uploadStatus" x-cloak x-text="uploadStatus"></p>
           </div>
@@ -983,7 +984,14 @@
     // 共有ストア catalog に擬似登録する。ブラウザで合成データは生成しない。
     function registerForm() {
       // ダミープレビューとして許可するテーブルと列(catalog.json の dummy_preview と同形)。
-      const PREVIEW_TABLES = ["patients", "psa_measurements", "medications"];
+      // CSV アップロード(#63)はヘッダ列名をこの whitelist と突き合わせてテーブルを自動判定する。
+      // この定義が「許可テーブル/列」の唯一のソース(JSON 由来だった sanitizePreview から移行)。
+      const PREVIEW_SCHEMA = {
+        patients: ["patient_id", "age", "risk_group", "enrollment_date"],
+        psa_measurements: ["patient_id", "date", "psa"],
+        medications: ["patient_id", "datetime", "drug", "dose_mg"],
+      };
+      const PREVIEW_TABLES = Object.keys(PREVIEW_SCHEMA);
       const MAX_PREVIEW_ROWS = 5;
       return {
         form: {
@@ -1059,7 +1067,10 @@
             },
           },
         ],
-        // アップロードされた JSON を読み、許可テーブルのみを先頭数行に整形して保持する。
+        // アップロードされた CSV(#63)を読み、ヘッダ列でテーブルを自動判定して
+        // 先頭数行を dummy_preview と同形(= { <table>: [行オブジェクト...] })に整形する。
+        // 合成データの CSV ダウンロード(#51)と同じ「1 ファイル = 1 テーブル」前提。
+        // 壊れた CSV / 未知ヘッダでも UI を破綻させない(uploadedPreview は null のまま)。
         onFile(ev) {
           this.error = "";
           this.success = "";
@@ -1072,39 +1083,112 @@
             this.uploadStatus = "ファイルの読み込みに失敗しました。";
           };
           reader.onload = () => {
-            let json;
+            let rows;
             try {
-              json = JSON.parse(reader.result);
+              rows = this.parseCsv(String(reader.result));
             } catch (e) {
-              this.uploadStatus = "JSON の解析に失敗しました(構文エラー)。";
+              this.uploadStatus = "CSV の解析に失敗しました(形式エラー)。";
               return;
             }
-            const preview = this.sanitizePreview(json);
-            if (!preview) {
+            if (!rows || rows.length === 0) {
+              this.uploadStatus = "CSV にデータ行がありません(ヘッダ＋1 行以上が必要です)。";
+              return;
+            }
+            const header = Object.keys(rows[0]);
+            const table = this.detectTable(header);
+            if (!table) {
               this.uploadStatus =
-                "対応するテーブル(patients / psa_measurements / medications)が見つかりません。";
+                "ヘッダの列名から対応テーブル(patients / psa_measurements / medications)を判定できませんでした。";
               return;
             }
-            this.uploadedPreview = preview;
-            const tables = Object.keys(preview).join(", ");
-            this.uploadStatus = "読み込み成功: " + tables;
+            // 許可列のみに絞り、先頭 MAX_PREVIEW_ROWS 行を採用する(dummy_preview と同形)。
+            const allowed = PREVIEW_SCHEMA[table];
+            const clean = rows.slice(0, MAX_PREVIEW_ROWS).map((r) => {
+              const o = {};
+              for (const col of allowed) {
+                if (Object.prototype.hasOwnProperty.call(r, col)) o[col] = r[col];
+              }
+              return o;
+            });
+            this.uploadedPreview = { [table]: clean };
+            this.uploadStatus = "読み込み成功: " + table + "(" + clean.length + " 行)";
           };
           reader.readAsText(file);
         },
-        // 任意 JSON から許可テーブルのみ抽出し、各テーブル先頭 MAX_PREVIEW_ROWS 行に切る。
-        // 壊れた/想定外の入力でも UI を破綻させない(オブジェクト行のみ採用)。
-        sanitizePreview(json) {
-          if (!json || typeof json !== "object" || Array.isArray(json)) return null;
-          const out = {};
+        // CSV ヘッダ列を whitelist と突き合わせ、最も一致するテーブル名を返す(無ければ null)。
+        // 判定基準: ヘッダにそのテーブルの許可列が 1 つ以上含まれ、かつ未知列だけではないこと。
+        // 複数テーブルに一致しうる場合は一致列数が最大のテーブルを選ぶ(同点は定義順で先勝ち)。
+        detectTable(header) {
+          const cols = new Set((header || []).map((h) => String(h)));
+          let best = null;
+          let bestHits = 0;
           for (const name of PREVIEW_TABLES) {
-            const rows = json[name];
-            if (!Array.isArray(rows)) continue;
-            const clean = rows
-              .filter((r) => r && typeof r === "object" && !Array.isArray(r))
-              .slice(0, MAX_PREVIEW_ROWS);
-            if (clean.length) out[name] = clean;
+            const hits = PREVIEW_SCHEMA[name].filter((c) => cols.has(c)).length;
+            if (hits > bestHits) {
+              bestHits = hits;
+              best = name;
+            }
           }
-          return Object.keys(out).length ? out : null;
+          return bestHits > 0 ? best : null;
+        },
+        // 最小の RFC4180 パーサ(#63)。ヘッダ行→行オブジェクト配列に変換する。
+        //   - クォート("..." )内の , / " / 改行を許容
+        //   - クォート内の "" は 1 個の " にエスケープ解除
+        //   - 先頭の BOM を除去し、末尾の空行は無視する
+        //   - 値は文字列として扱う(数値変換はしない: 表示専用のため)
+        // 想定外(列数不揃い等)は欠損を空文字で補い、UI を破綻させない。
+        parseCsv(text) {
+          let s = String(text == null ? "" : text);
+          if (s.charCodeAt(0) === 0xfeff) s = s.slice(1); // BOM 除去
+          const records = [];
+          let field = "";
+          let record = [];
+          let inQuotes = false;
+          let i = 0;
+          const n = s.length;
+          const pushField = () => { record.push(field); field = ""; };
+          const pushRecord = () => { pushField(); records.push(record); record = []; };
+          while (i < n) {
+            const ch = s[i];
+            if (inQuotes) {
+              if (ch === '"') {
+                if (s[i + 1] === '"') { field += '"'; i += 2; continue; }
+                inQuotes = false; i += 1; continue;
+              }
+              field += ch; i += 1; continue;
+            }
+            if (ch === '"') { inQuotes = true; i += 1; continue; }
+            if (ch === ",") { pushField(); i += 1; continue; }
+            if (ch === "\r") { // CRLF / CR を 1 つの改行として扱う
+              pushRecord();
+              if (s[i + 1] === "\n") i += 2; else i += 1;
+              continue;
+            }
+            if (ch === "\n") { pushRecord(); i += 1; continue; }
+            field += ch; i += 1;
+          }
+          // 末尾フィールド/レコードを確定(ファイル末尾に改行が無い場合)。
+          if (field.length > 0 || record.length > 0) pushRecord();
+          // 末尾の空行(空フィールド 1 個だけのレコード)を捨てる。
+          while (
+            records.length > 0 &&
+            records[records.length - 1].length === 1 &&
+            records[records.length - 1][0] === ""
+          ) {
+            records.pop();
+          }
+          if (records.length === 0) return [];
+          const header = records[0].map((h) => String(h).trim());
+          const out = [];
+          for (let r = 1; r < records.length; r += 1) {
+            const cells = records[r];
+            const obj = {};
+            for (let c = 0; c < header.length; c += 1) {
+              obj[header[c]] = c < cells.length ? cells[c] : "";
+            }
+            out.push(obj);
+          }
+          return out;
         },
         // 現在の入力からダミープレビューを決める(source に応じて)。
         resolvePreview() {
@@ -1131,7 +1215,7 @@
           const preview = this.resolvePreview();
           if (!preview) {
             this.error = this.source === "upload"
-              ? "アップロードした JSON から有効なダミーデータを取得できませんでした。"
+              ? "アップロードした CSV から有効なダミーデータを取得できませんでした。"
               : "同梱サンプルを選択してください。";
             return;
           }

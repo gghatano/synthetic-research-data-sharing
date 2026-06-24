@@ -28,6 +28,24 @@ def _fill_metadata(page: Page, title: str) -> None:
     page.get_by_test_id("reg-usage").fill("活用例1\n活用例2")
 
 
+# 許可テーブル(patients)のヘッダを持つ正常な CSV(#63)。クォート/カンマ込みの値も含める。
+_PATIENTS_CSV = (
+    "patient_id,age,risk_group,enrollment_date\n"
+    'P-001,58,"moderate, stable",2022-01-10\n'
+    "P-002,67,high,2022-03-22\n"
+)
+# どの許可テーブルにも一致しないヘッダの CSV(エラー扱い)。
+_UNKNOWN_CSV = "foo,bar,baz\n1,2,3\n4,5,6\n"
+
+
+def _set_csv_upload(page: Page, name: str, body: str) -> None:
+    """upload ソースを選び、メモリ上の CSV ファイルを file input に流し込む(#63)。"""
+    page.get_by_test_id("reg-source-upload").check()
+    page.get_by_test_id("reg-file").set_input_files(
+        files=[{"name": name, "mimeType": "text/csv", "buffer": body.encode("utf-8")}]
+    )
+
+
 def test_register_sample_reflects_in_catalog(page: Page, base_url: str) -> None:
     """owner が同梱サンプルで登録すると、カタログ一覧に即時反映される。"""
     open_register(page, base_url)
@@ -48,6 +66,55 @@ def test_register_sample_reflects_in_catalog(page: Page, base_url: str) -> None:
     page.get_by_test_id("nav-explore").click()
     page.wait_for_selector("[data-testid='catalog-card']", state="visible")
     expect(page.locator("[data-testid='catalog-card']", has_text=title)).to_be_visible()
+
+
+def test_register_csv_upload_reflects_in_catalog(page: Page, base_url: str) -> None:
+    """owner が CSV をアップロードして登録すると、テーブルを自動判定しカタログに反映される(#63)。"""
+    open_register(page, base_url)
+
+    title = "CSV アップロード(E2E 登録)"
+    _fill_metadata(page, title)
+    _set_csv_upload(page, "patients.csv", _PATIENTS_CSV)
+
+    # ヘッダから patients テーブルを判定し、行数つきの成功メッセージが出る。
+    status = page.get_by_test_id("reg-file-status")
+    expect(status).to_be_visible()
+    expect(status).to_contain_text("patients")
+
+    page.get_by_test_id("reg-submit").click()
+    expect(page.get_by_test_id("reg-success")).to_be_visible()
+    expect(page.locator("[data-testid='reg-item']", has_text=title)).to_be_visible()
+
+    # 個別ページでダミーデータプレビュー(patients テーブル)が描画される。
+    page.get_by_test_id("reg-open").first.click()
+    page.wait_for_selector("[data-testid='dataset-view']", state="visible")
+    preview = page.locator("[data-testid='dataset-preview'] .preview-table[data-table='patients']")
+    expect(preview).to_be_visible()
+    # クォート内のカンマを含む値が壊れず 1 セルとして表示される(XSS/パース健全性)。
+    expect(preview).to_contain_text("moderate, stable")
+
+
+def test_register_csv_upload_unknown_header_shows_error(page: Page, base_url: str) -> None:
+    """未知ヘッダの CSV はエラーを表示し、クラッシュせず登録もできない(#63)。"""
+    open_register(page, base_url)
+    _fill_metadata(page, "未知ヘッダ CSV ケース")
+    _set_csv_upload(page, "unknown.csv", _UNKNOWN_CSV)
+
+    # 状態メッセージで判定不能を通知(uploadedPreview は null のまま)。
+    status = page.get_by_test_id("reg-file-status")
+    expect(status).to_be_visible()
+    expect(status).to_contain_text("判定")
+
+    # 登録を試みるとデータ源エラーになり、登録は発生しない(UI は使用可能なまま)。
+    page.get_by_test_id("reg-submit").click()
+    expect(page.get_by_test_id("reg-error")).to_be_visible()
+    expect(page.get_by_test_id("reg-registered-empty")).to_be_visible()
+    expect(page.locator("[data-testid='reg-item']")).to_have_count(0)
+    # フォームは引き続き操作できる(別ソースに切替→登録できる)。
+    page.get_by_test_id("reg-source-sample").check()
+    page.get_by_test_id("reg-sample-select").select_option("renal-egfr")
+    page.get_by_test_id("reg-submit").click()
+    expect(page.get_by_test_id("reg-success")).to_be_visible()
 
 
 def test_register_demo_fills_form_without_registering(page: Page, base_url: str) -> None:
